@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Зубр</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Зубр">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#E4EAF0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131B2C" media="(prefers-color-scheme: dark)">
+<style>
+:root{
+  --paper:#E4EAF0; --card:#FCFDFE; --ink:#17233B; --ink2:#55647E; --line:#C2CEDC; --rule:#D6E0EB;
+  --red:#CF5560; --accent:#2B47C2; --accent-ink:#FFFFFF;
+  --ok:#1B7F56; --ok-ink:#FFFFFF; --ok-bg:#DFF1E8; --bad:#B93A35; --bad-ink:#FFFFFF; --bad-bg:#F8E3E1;
+  --shade:rgba(23,35,59,.22);
+  --serif:ui-serif,"New York","Iowan Old Style",Georgia,"Times New Roman",serif;
+  --sans:system-ui,-apple-system,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+  --lh:2.125rem;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#131B2C; --card:#1D2840; --ink:#E9EEF6; --ink2:#9CAAC1; --line:#34435F; --rule:#2B3954;
+    --red:#E0727A; --accent:#93A8FF; --accent-ink:#0F1730;
+    --ok:#55C792; --ok-ink:#0C2A1D; --ok-bg:#173A2F; --bad:#F27E76; --bad-ink:#3A0F0C; --bad-bg:#44252A;
+    --shade:rgba(0,0,0,.5);
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font:16px/1.45 var(--sans);-webkit-text-size-adjust:100%;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none;text-align:inherit}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input{font:inherit;color:inherit}
+a{color:var(--accent)}
+h1,h2,h3,p{margin:0}
+
+#app{height:100vh;height:100dvh;display:flex;flex-direction:column;max-width:560px;margin:0 auto}
+.view{flex:1;min-height:0;display:none;flex-direction:column}
+.view.on{display:flex}
+.top{padding:calc(env(safe-area-inset-top,0px) + 14px) 20px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:calc(env(safe-area-inset-top,0px) + 54px)}
+.scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 20px 28px}
+.dock{padding:12px 20px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);display:grid;gap:10px}
+.view.tabbed .dock{padding-bottom:12px}
+.tabs{display:none;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs.on{display:flex}
+.tabs button{flex:1;padding:13px 4px;font-size:.875rem;color:var(--ink2);text-align:center}
+.tabs button[aria-current="page"]{color:var(--ink);font-weight:600;box-shadow:inset 0 2px 0 var(--ink)}
+
+.word{font:600 1.0625rem var(--serif);letter-spacing:.01em}
+.chip{font-size:.8125rem;color:var(--ink2);padding:8px 0 8px 12px;text-align:right}
+.chip.warn{color:var(--bad)}
+.lead{font:600 1.875rem/1.15 var(--serif);margin:10px 0 6px;text-wrap:balance}
+.sub{color:var(--ink2);margin-bottom:22px}
+.hint{font-size:.875rem;color:var(--ink2)}
+.h2{font:600 1.0625rem var(--sans);margin:26px 0 8px}
+
+.btn{display:block;width:100%;min-height:54px;padding:14px 18px;border-radius:14px;font-weight:600;font-size:1.0625rem;text-align:center}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.quiet{border:1.5px solid var(--line)}
+.btn.ok{background:var(--ok);color:var(--ok-ink)}
+.btn.bad{background:var(--bad);color:var(--bad-ink)}
+.btn:active{opacity:.82}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.link{color:var(--accent);padding:10px 0;text-align:center;font-size:.9375rem;width:100%}
+.link.left{text-align:left;width:auto}
+.link.danger{color:var(--bad)}
+
+/* коробки Лейтнера: карточки стоят ребром в отделениях */
+.boxes{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:6px 0 10px}
+.box{text-align:center}
+.box .well{height:52px;border:1.5px solid var(--line);border-top:0;border-radius:0 0 6px 6px;display:flex;align-items:flex-end;padding:0 5px 4px}
+.box .stack{width:100%;height:calc(var(--n) * 4px);background:repeating-linear-gradient(to top,var(--ink) 0 2px,transparent 2px 4px)}
+.box b{display:block;font:600 1.0625rem var(--serif);margin-top:6px}
+.box span{display:block;font-size:.75rem;color:var(--ink2)}
+
+.rows{border-top:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:10px;width:100%;padding:13px 2px;border-bottom:1px solid var(--line);min-height:50px}
+.row .dot{flex:none;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--ink2)}
+.row[aria-pressed="true"] .dot{border:5.5px solid var(--accent)}
+.row .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.row[aria-pressed="true"] .t{font-weight:600}
+.row.sub-row{padding-left:28px}
+.row.sub-row .t{font-size:.9375rem}
+.cnt{flex:none;font-size:.875rem;min-width:2ch;text-align:right;font-variant-numeric:tabular-nums}
+.cnt.fresh{color:var(--ink2)}
+.row .go{color:var(--ink2);flex:none}
+
+.switch{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.9375rem;padding:2px 0}
+.switch input{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:14px;background:var(--line);position:relative;margin:0;flex:none;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--card);transition:transform .15s}
+.switch input:checked{background:var(--accent)}
+.switch input:checked::after{transform:translateX(20px)}
+
+.notice{border-left:3px solid var(--red);padding:8px 12px;margin:0 0 18px;font-size:.875rem;background:var(--card);border-radius:0 6px 6px 0}
+
+/* карточка: красная линия и линовка как у каталожной */
+.bar{height:3px;background:var(--line);margin:0 20px 14px;border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ink);width:0}
+.icard{background:var(--card);border-radius:6px;box-shadow:0 0 0 1px var(--line),0 14px 26px -18px var(--shade);overflow:hidden}
+.icard-head{padding:11px 18px 8px;font-size:.8125rem;color:var(--ink2);border-bottom:2px solid var(--red)}
+.icard-q{padding:0 18px var(--lh);min-height:calc(var(--lh) * 4);font:1.25rem/var(--lh) var(--serif);overflow-wrap:anywhere;
+  background:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--lh) - 1px),var(--rule) calc(var(--lh) - 1px),var(--rule) var(--lh))}
+.icard.compact .icard-q{min-height:calc(var(--lh) * 2)}
+.icard-a{padding:16px 18px 18px;border-top:1.5px dashed var(--line);font:1.125rem/1.5 var(--serif);overflow-wrap:anywhere}
+.icard-a p+p,.note p+p{margin-top:.6em}
+.reveal{animation:rise .18s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.note{margin-top:16px;font-size:.9375rem;line-height:1.5;overflow-wrap:anywhere}
+.note h3{font-size:.8125rem;font-weight:600;color:var(--ink2);margin-bottom:4px}
+.src{margin-top:12px;font-size:.875rem;color:var(--ink2)}
+.verdict{margin-top:16px;font-weight:600}
+.verdict.ok{color:var(--ok)} .verdict.bad{color:var(--bad)}
+.opts{display:grid;gap:10px;margin-top:16px}
+.opt{display:block;width:100%;padding:14px 16px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);font:1rem/1.4 var(--serif);min-height:54px;overflow-wrap:anywhere}
+.opt.right{border-color:var(--ok);background:var(--ok-bg)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-bg)}
+.opt[disabled]{cursor:default}
+.opt .tag{display:block;font:600 .75rem var(--sans);margin-bottom:3px}
+.opt.right .tag{color:var(--ok)} .opt.wrong .tag{color:var(--bad)}
+
+.field{display:grid;gap:6px;margin-bottom:14px}
+.field span{font-size:.875rem;font-weight:600}
+.field small{font-size:.8125rem;color:var(--ink2)}
+.field input{width:100%;padding:13px 14px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);min-height:48px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kv{font-size:.875rem;color:var(--ink2);margin:4px 0}
+.kv b{color:var(--ink);font-weight:600}
+.err{color:var(--bad);font-size:.875rem;margin:8px 0}
+.stackv{display:grid;gap:10px}
+
+.prose{font:1.0625rem/1.6 var(--serif);overflow-wrap:anywhere}
+.prose h1{font-size:1.625rem;line-height:1.2;margin:4px 0 14px}
+.prose h2{font-size:1.3125rem;line-height:1.25;margin:28px 0 10px;padding-top:10px;border-top:2px solid var(--red)}
+.prose h3{font-size:1.125rem;margin:22px 0 8px}
+.prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose .tw,.prose .diagram{margin:0 0 14px}
+.prose ul,.prose ol{padding-left:1.3em}
+.prose li+li{margin-top:4px}
+.prose blockquote{border-left:3px solid var(--line);padding-left:14px;color:var(--ink2)}
+.prose code{font:.875em ui-monospace,Menlo,monospace;background:var(--rule);padding:1px 5px;border-radius:4px}
+.prose pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto}
+.prose pre code{background:none;padding:0}
+.prose img,.prose svg{max-width:100%;height:auto}
+.prose .tw,.prose .diagram{overflow-x:auto}
+.prose .diagram{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center;overflow-wrap:normal;font:1rem/1.4 var(--sans)}
+.prose .diagram svg{max-width:none}
+.prose table{border-collapse:collapse;font:.9375rem/1.4 var(--sans);overflow-wrap:normal}
+.prose th,.prose td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+.prose th{background:var(--rule)}
+.prose hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+.flash{animation:flash 1.6s ease-out}
+@keyframes flash{from{background:var(--rule)}to{background:transparent}}
+
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 16px;border-radius:10px;font-size:.9375rem;width:max-content;max-width:calc(100% - 40px);opacity:0;pointer-events:none;transition:opacity .2s;z-index:10;text-align:center}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <section class="view tabbed" id="v-home"></section>
+  <section class="view" id="v-review"></section>
+  <section class="view tabbed" id="v-materials"></section>
+  <section class="view" id="v-reader"></section>
+  <section class="view tabbed" id="v-settings"></section>
+  <nav class="tabs" id="tabs" aria-label="Разделы">
+    <button data-act="tab" data-view="home">Карточки</button>
+    <button data-act="tab" data-view="materials">Материалы</button>
+    <button data-act="tab" data-view="settings">Настройки</button>
+  </nav>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="file" accept=".json,.md,application/json,text/markdown,text/plain" multiple hidden>
+
+<script src="vendor/marked.umd.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script>
+'use strict';
+/* ---------- утилиты ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const today = () => ymd(new Date());
+const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d); };
+const plural = (n, f) => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? f[2] : b === 1 ? f[0] : b > 1 && b < 5 ? f[1] : f[2]; };
+const cardsWord = n => n + ' ' + plural(n, ['карточка', 'карточки', 'карточек']);
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36); };
+const slug = s => String(s).trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '');
+const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+const niceDate = s => { const [, m, d] = s.split('-').map(Number); return d + ' ' + MONTHS[m - 1]; };
+function b64(str) { const b = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+function md(text) { try { return DOMPurify.sanitize(marked.parse(String(text), { breaks: true })); } catch { return esc(text).replace(/\n/g, '<br>'); } }
+function mdi(text) { try { return DOMPurify.sanitize(marked.parseInline(String(text), { breaks: true })); } catch { return esc(text).replace(/\n/g, '<br>'); } }
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 3200); }
+
+/* ---------- хранилище на телефоне (IndexedDB) ---------- */
+const DB = {
+  _p: null,
+  open() { return this._p ||= new Promise((res, rej) => { const r = indexedDB.open('zubr', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async get(k) { const db = await this.open(); return new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  async set(k, v) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); }
+};
+const S = {
+  settings: { repo: '', token: '', sessionSize: 20, newPerSession: 10, options: false, scope: { pack: null, topic: null } },
+  packs: {},      // путь -> { key, src:'repo'|'file', sha, id, title, cards:[] }
+  materials: {},  // путь -> { path, src, sha, text }
+  images: {},     // путь -> { sha, url }
+  progress: {},   // id карточки -> { box, due, ts, ok, bad }
+  sync: { last: 0, dirty: false, progressSha: '', error: '', reset: false }
+};
+let storageBroken = false;
+async function save(key) { try { await DB.set(key, S[key]); } catch (e) { if (!storageBroken) { storageBroken = true; toast('Телефон не даёт сохранять данные. Проверь свободное место.'); } } }
+async function loadAll() {
+  for (const k of Object.keys(S)) {
+    try { const v = await DB.get(k); if (v && typeof v === 'object') S[k] = k === 'settings' || k === 'sync' ? { ...S[k], ...v } : v; } catch { storageBroken = true; }
+  }
+  if (!S.settings.scope) S.settings.scope = { pack: null, topic: null };
+}
+
+/* ---------- паки и карточки ---------- */
+const INTERVALS = [0, 1, 2, 4, 8, 16];
+const BOX_LABEL = ['', '1 день', '2 дня', '4 дня', '8 дней', '16 дней'];
+function normPack(raw, fallbackId) {
+  if (!raw || !Array.isArray(raw.cards)) throw new Error('в файле нет списка cards');
+  const meta = raw.pack || {};
+  const id = String(meta.id || raw.id || fallbackId);
+  const seen = new Set(), cards = [];
+  for (const c of raw.cards) {
+    if (!c || c.q == null || c.a == null || String(c.q).trim() === '') continue;
+    let cid = c.id != null && String(c.id) !== '' ? String(c.id) : id + ':' + hash(String(c.q));
+    while (seen.has(cid)) cid += '~';
+    seen.add(cid);
+    cards.push({ id: cid, topic: String(c.topic || 'Без темы'), q: String(c.q), a: String(c.a), explain: c.explain ? String(c.explain) : '',
+      options: Array.isArray(c.options) ? c.options.map(String) : [], source: c.source ? String(c.source) : '', material: c.material ? String(c.material) : '' });
+  }
+  return { id, title: String(meta.title || raw.title || id), cards };
+}
+let IDX = { cards: [] };
+function reindex() {
+  const cards = [];
+  for (const key of Object.keys(S.packs).sort()) { const p = S.packs[key]; for (const c of p.cards) cards.push({ ...c, packKey: key, packTitle: p.title }); }
+  IDX = { cards };
+  const sc = S.settings.scope;
+  if (sc.pack && !S.packs[sc.pack]) S.settings.scope = { pack: null, topic: null };
+  else if (sc.pack && sc.topic && !S.packs[sc.pack].cards.some(c => c.topic === sc.topic)) sc.topic = null;
+}
+function scopeCards(sc) { let cs = IDX.cards; if (sc.pack) cs = cs.filter(c => c.packKey === sc.pack); if (sc.topic) cs = cs.filter(c => c.topic === sc.topic); return cs; }
+function counts(cs) { const t = today(); let due = 0, fresh = 0; for (const c of cs) { const p = S.progress[c.id]; if (!p) fresh++; else if (p.due <= t) due++; } return { due, fresh, total: cs.length }; }
+function buildSession(sc, kind) {
+  const cs = scopeCards(sc), t = today();
+  if (kind === 'all') return shuffle(cs.slice());
+  const due = shuffle(cs.filter(c => S.progress[c.id] && S.progress[c.id].due <= t)).sort((a, b) => S.progress[a.id].due < S.progress[b.id].due ? -1 : S.progress[a.id].due > S.progress[b.id].due ? 1 : 0);
+  const size = Math.max(1, S.settings.sessionSize | 0);
+  const picked = due.slice(0, size);
+  const room = Math.min(Math.max(0, S.settings.newPerSession | 0), size - picked.length);
+  if (room > 0) picked.push(...cs.filter(c => !S.progress[c.id]).slice(0, room));
+  return picked;
+}
+function buildOptions(card) {
+  const norm = s => String(s).trim().toLowerCase();
+  const used = new Set([norm(card.a)]), wrong = [];
+  const take = list => { for (const x of list) { if (wrong.length >= 3) break; const k = norm(x); if (!k || used.has(k)) continue; used.add(k); wrong.push(x); } };
+  take(shuffle(card.options.slice()));
+  const pack = S.packs[card.packKey];
+  if (wrong.length < 3 && pack) {
+    take(shuffle(pack.cards.filter(c => c.id !== card.id && c.topic === card.topic).map(c => c.a)));
+    if (wrong.length < 3) take(shuffle(pack.cards.filter(c => c.id !== card.id).map(c => c.a)));
+  }
+  if (!wrong.length) return null;
+  return shuffle([{ t: card.a, ok: true }, ...wrong.map(t => ({ t, ok: false }))]);
+}
+function mergeProgress(remote) {
+  let pulled = 0, ahead = false;
+  for (const id in remote) { const r = remote[id], l = S.progress[id]; if (r && typeof r === 'object' && (!l || (r.ts || 0) > (l.ts || 0))) { S.progress[id] = r; pulled++; } }
+  for (const id in S.progress) { const r = remote[id]; if (!r || (S.progress[id].ts || 0) > (r.ts || 0)) { ahead = true; break; } }
+  return { pulled, ahead };
+}
+
+/* ---------- синхронизация с GitHub ---------- */
+const configured = () => !!(S.settings.repo && S.settings.token);
+async function gh(path, { method = 'GET', body, as = 'json' } = {}) {
+  const headers = { Authorization: 'Bearer ' + S.settings.token, Accept: as === 'json' ? 'application/vnd.github+json' : 'application/vnd.github.raw+json' };
+  if (body) headers['Content-Type'] = 'application/json';
+  const r = await fetch('https://api.github.com' + path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+  if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; try { e.detail = (await r.json()).message; } catch {} throw e; }
+  return as === 'blob' ? r.blob() : as === 'text' ? r.text() : r.json();
+}
+function syncErrorText(e) {
+  if (e.status === 401) return 'Токен не принят: он неверный или истёк. Создай новый и вставь его ниже.';
+  if (e.status === 404) return 'Репозиторий не найден. Проверь название и что токену выдан доступ именно к нему.';
+  if (e.status === 403 || e.status === 429) return 'GitHub отказал в доступе. У токена должно быть право Contents: Read and write. Если право есть, превышен лимит запросов - попробуй через час.';
+  if (!e.status) return 'Нет связи с GitHub.';
+  return 'GitHub ответил ошибкой ' + e.status + (e.detail ? ': ' + e.detail : '') + '.';
+}
+const blobToDataUrl = b => new Promise((res, rej) => { const f = new FileReader(); f.onload = () => res(f.result); f.onerror = () => rej(f.error); f.readAsDataURL(b); });
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' };
+let syncing = false, syncTimer = 0;
+async function sync(opts = {}) {
+  if (!configured() || syncing) return;
+  if (!navigator.onLine) { if (opts.manual) toast('Нет сети. Отправлю, когда появится.'); return; }
+  syncing = true; refreshChip();
+  const repo = '/repos/' + S.settings.repo;
+  let changed = false;
+  try {
+    const info = await gh(repo);
+    const branch = info.default_branch || 'main';
+    let files = [];
+    try { files = (await gh(repo + '/git/trees/' + encodeURIComponent(branch) + '?recursive=1')).tree.filter(f => f.type === 'blob'); }
+    catch (e) { if (e.status !== 409 && e.status !== 404) throw e; }   // пустой репозиторий
+    const byPath = Object.fromEntries(files.map(f => [f.path, f]));
+    const bad = [];
+    // паки
+    for (const f of files.filter(f => /^packs\/.+\.json$/i.test(f.path))) {
+      const have = S.packs[f.path];
+      if (have && have.src === 'repo' && have.sha === f.sha) continue;
+      const text = await gh(repo + '/git/blobs/' + f.sha, { as: 'text' });
+      try { const p = normPack(JSON.parse(text.replace(/^\uFEFF/, '')), f.path.replace(/^packs\//, '').replace(/\.json$/i, '')); S.packs[f.path] = { ...p, key: f.path, src: 'repo', sha: f.sha }; changed = true; }
+      catch { bad.push(f.path); }
+    }
+    for (const k of Object.keys(S.packs)) if (S.packs[k].src === 'repo' && !byPath[k]) { delete S.packs[k]; changed = true; }
+    // материалы
+    for (const f of files.filter(f => /^materials\/.+\.md$/i.test(f.path))) {
+      const have = S.materials[f.path];
+      if (have && have.src === 'repo' && have.sha === f.sha) continue;
+      S.materials[f.path] = { path: f.path, src: 'repo', sha: f.sha, text: await gh(repo + '/git/blobs/' + f.sha, { as: 'text' }) }; changed = true;
+    }
+    for (const k of Object.keys(S.materials)) if (S.materials[k].src === 'repo' && !byPath[k]) { delete S.materials[k]; changed = true; }
+    // картинки к материалам
+    let imgChanged = false;
+    for (const f of files.filter(f => /^materials\/.+\.(png|jpe?g|gif|webp|svg)$/i.test(f.path))) {
+      if (S.images[f.path] && S.images[f.path].sha === f.sha) continue;
+      if (f.size > 3e6) { bad.push(f.path + ' (больше 3 МБ)'); continue; }
+      const blob = await gh(repo + '/git/blobs/' + f.sha, { as: 'blob' });
+      const typed = new Blob([blob], { type: MIME[f.path.split('.').pop().toLowerCase()] });
+      S.images[f.path] = { sha: f.sha, url: await blobToDataUrl(typed) }; imgChanged = true;
+    }
+    for (const k of Object.keys(S.images)) if (!byPath[k]) { delete S.images[k]; imgChanged = true; }
+    if (changed) { await save('packs'); await save('materials'); reindex(); }
+    if (imgChanged) await save('images');
+    // прогресс: забрать, слить по свежести, отправить
+    const pf = byPath['progress.json'];
+    let sha = pf ? pf.sha : '';
+    let push = S.sync.dirty || S.sync.reset;
+    if (pf && !S.sync.reset && pf.sha !== S.sync.progressSha) {
+      let remote = {};
+      const text = await gh(repo + '/git/blobs/' + pf.sha, { as: 'text' });
+      try { remote = JSON.parse(text).cards || {}; } catch {}
+      const m = mergeProgress(remote);
+      if (m.pulled) { await save('progress'); changed = true; }
+      if (m.ahead) push = true;
+    }
+    if (!pf && Object.keys(S.progress).length) push = true;
+    if (push) {
+      const stamp = Date.now();
+      const body = { message: 'Прогресс ' + new Date().toISOString().slice(0, 16).replace('T', ' '), content: b64(JSON.stringify({ format: 1, updated: new Date().toISOString(), cards: S.progress })), branch };
+      if (sha) body.sha = sha;
+      let res;
+      try { res = await gh(repo + '/contents/progress.json', { method: 'PUT', body }); }
+      catch (e) { if (e.status === 409 || e.status === 422) e.conflict = true; throw e; }
+      sha = res.content.sha;
+      if (!(S.sync.dirtyAt > stamp)) S.sync.dirty = false;
+      S.sync.reset = false;
+    }
+    S.sync.progressSha = sha; S.sync.last = Date.now();
+    S.sync.error = bad.length ? 'Не удалось прочитать: ' + bad.join(', ') + '. Проверь, что это правильный JSON.' : '';
+    await save('sync');
+    if (opts.manual) toast(S.sync.error ? 'Синхронизировано, но не всё прочиталось' : 'Синхронизировано');
+  } catch (e) {
+    if (e.conflict && !opts.retried) { syncing = false; S.sync.progressSha = ''; return await sync({ ...opts, retried: true }); }
+    S.sync.error = syncErrorText(e); await save('sync');
+    if (opts.manual) toast(S.sync.error);
+  } finally { syncing = false; }
+  if (changed && (VIEW === 'home' || VIEW === 'materials')) show(VIEW); else if (VIEW === 'settings') show('settings'); else refreshChip();
+}
+function markDirty() { S.sync.dirty = true; S.sync.dirtyAt = Date.now(); save('sync'); clearTimeout(syncTimer); syncTimer = setTimeout(() => sync(), 60000); }
+function chipText() {
+  if (!configured()) return ['Только на этом телефоне', false];
+  if (syncing) return ['Синхронизация…', false];
+  if (S.sync.error) return ['Ошибка синхронизации', true];
+  if (S.sync.dirty) return [navigator.onLine ? 'Есть неотправленное' : 'Офлайн, отправлю позже', false];
+  if (!S.sync.last) return ['Ещё не синхронизировано', false];
+  const d = new Date(S.sync.last);
+  return ['Сохранено ' + (ymd(d) === today() ? 'в ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : niceDate(ymd(d))), false];
+}
+function refreshChip() { const c = $('#chip'); if (!c) return; const [t, warn] = chipText(); c.textContent = t; c.classList.toggle('warn', warn); }
+
+/* ---------- экраны ---------- */
+let VIEW = 'home';
+function show(v) {
+  VIEW = v;
+  document.querySelectorAll('.view').forEach(e => e.classList.toggle('on', e.id === 'v-' + v));
+  const tabbed = v === 'home' || v === 'materials' || v === 'settings';
+  $('#tabs').classList.toggle('on', tabbed);
+  document.querySelectorAll('#tabs button').forEach(b => b.dataset.view === v ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+  ({ home: renderHome, review: renderReview, materials: renderMaterials, settings: renderSettings, reader: () => {} })[v]();
+}
+const topBar = () => `<header class="top"><span class="word">Зубр</span><button class="chip" id="chip" data-act="chip"></button></header>`;
+
+let HOME = { packs: [], topics: [] };
+function renderHome() {
+  const el = $('#v-home');
+  if (!IDX.cards.length) {
+    el.innerHTML = topBar() + `<div class="scroll"><h1 class="lead">Карточек пока нет</h1>
+      <p class="sub">${configured() ? 'В репозитории нет паков. Положи JSON-файл в папку packs и нажми «Синхронизировать» в настройках.' : 'Подключи репозиторий с паками или загрузи файл пака с телефона.'}</p>
+      <div class="stackv"><button class="btn primary" data-act="tab" data-view="settings">Открыть настройки</button><button class="btn quiet" data-act="import">Загрузить файл пака</button></div></div>`;
+    refreshChip(); return;
+  }
+  const sc = S.settings.scope, cs = scopeCards(sc), k = counts(cs), session = buildSession(sc, 'review');
+  const boxes = [0, 0, 0, 0, 0, 0]; let nextDue = '';
+  const t = today();
+  for (const c of cs) { const p = S.progress[c.id]; if (!p) continue; boxes[Math.min(5, Math.max(1, p.box))]++; if (p.due > t && (!nextDue || p.due < nextDue)) nextDue = p.due; }
+  const max = Math.max(1, ...boxes);
+  let lead, sub;
+  if (k.due + k.fresh === 0) { lead = 'На сегодня всё'; sub = nextDue ? 'Ближайшие карточки вернутся ' + niceDate(nextDue) + '.' : 'Все карточки выучены.'; }
+  else { lead = 'Сегодня ' + cardsWord(k.due + k.fresh); sub = k.due && k.fresh ? k.due + ' на повторение, ' + k.fresh + ' ' + plural(k.fresh, ['новая', 'новые', 'новых']) + '.' : k.due ? 'Все на повторение, новых нет.' : 'Все новые, повторять пока нечего.'; }
+  HOME = { packs: Object.keys(S.packs).sort(), topics: [] };
+  const rowHtml = (cls, pressed, attrs, title, c) => `<button class="row ${cls}" aria-pressed="${pressed}" data-act="scope" ${attrs}><span class="dot"></span><span class="t">${esc(title)}</span><span class="cnt" title="повторить">${c.due || ''}</span><span class="cnt fresh" title="новые">${c.fresh ? '+' + c.fresh : ''}</span></button>`;
+  let rows = HOME.packs.length > 1 ? rowHtml('', !sc.pack, 'data-p="-1"', 'Все паки', counts(IDX.cards)) : '';
+  HOME.packs.forEach((key, i) => {
+    const p = S.packs[key], pc = IDX.cards.filter(c => c.packKey === key);
+    const selected = sc.pack === key || HOME.packs.length === 1;
+    rows += rowHtml('', selected && !sc.topic, `data-p="${i}"`, p.title, counts(pc));
+    if (selected) {
+      const topics = [...new Set(pc.map(c => c.topic))];
+      if (topics.length > 1) topics.forEach(tp => { const j = HOME.topics.push({ pack: key, topic: tp }) - 1; rows += rowHtml('sub-row', sc.pack === key && sc.topic === tp, `data-t="${j}"`, tp, counts(pc.filter(c => c.topic === tp))); });
+    }
+  });
+  const hint = navigator.standalone === false ? `<p class="notice">Добавь приложение на экран «Домой»: кнопка «Поделиться» в Safari, затем «На экран Домой». Открывай его только с иконки, иначе Safari может стереть данные.</p>` : '';
+  el.innerHTML = topBar() + `<div class="scroll">${hint}
+    <h1 class="lead">${lead}</h1><p class="sub">${sub}</p>
+    <div class="boxes" role="img" aria-label="Карточки по коробкам: ${boxes.slice(1).join(', ')}">${[1, 2, 3, 4, 5].map(i => `<div class="box"><div class="well"><div class="stack" style="--n:${boxes[i] ? Math.max(1, Math.round(boxes[i] / max * 11)) : 0}"></div></div><b>${boxes[i]}</b><span>${BOX_LABEL[i]}</span></div>`).join('')}</div>
+    <p class="hint">Пять коробок. Знал - карточка уходит правее и возвращается реже. Не знал - снова в первую.</p>
+    <h2 class="h2">Что повторять</h2><div class="rows">${rows}</div>
+    <p class="hint" style="margin-top:8px">Первое число - повторить сегодня, с плюсом - новые.</p></div>
+    <div class="dock">
+      <label class="switch"><span>Показывать варианты ответа</span><input type="checkbox" id="optmode" ${S.settings.options ? 'checked' : ''}></label>
+      ${session.length ? `<button class="btn primary" data-act="start">Начать: ${cardsWord(session.length)}</button><button class="link" data-act="startall">Пройти все ${k.total} подряд</button>`
+        : `<button class="btn primary" data-act="startall">Пройти все ${k.total} подряд</button>`}
+    </div>`;
+  refreshChip();
+}
+
+/* ---------- повторение ---------- */
+let R = null;
+function startSession(kind) {
+  const queue = buildSession(S.settings.scope, kind);
+  if (!queue.length) { toast('В этом разделе нет карточек'); return; }
+  R = { kind, queue, done: 0, first: 0, failed: new Set(), cur: null, revealed: false, opts: null, picked: -1, finished: false };
+  nextCard(); show('review');
+}
+function nextCard() {
+  R.cur = R.queue.shift() || null; R.revealed = false; R.picked = -1;
+  if (!R.cur) { R.finished = true; sync(); return; }
+  R.opts = S.settings.options ? buildOptions(R.cur) : null;
+}
+function grade(ok) {
+  const c = R.cur, t = today();
+  const p = S.progress[c.id] ? { ...S.progress[c.id] } : { box: 0, due: t, ts: 0, ok: 0, bad: 0 };
+  const wasDue = !p.ts || p.due <= t;
+  if (ok) {
+    p.ok = (p.ok || 0) + 1;
+    if (R.failed.has(c.id)) { p.box = 1; p.due = addDays(1); }
+    else { R.first++; if (wasDue) { p.box = Math.min((p.box || 0) + 1, 5); p.due = addDays(INTERVALS[p.box]); } }
+  } else {
+    p.bad = (p.bad || 0) + 1; p.box = 1; p.due = t;
+    R.failed.add(c.id);
+    R.queue.splice(Math.min(R.queue.length, 3), 0, c);
+  }
+  p.ts = Date.now(); S.progress[c.id] = p; save('progress'); markDirty();
+  R.done++; nextCard(); renderReview();
+}
+function cardExtras(c) {
+  let h = '';
+  if (c.explain) h += `<div class="note"><h3>Пояснение</h3>${md(c.explain)}</div>`;
+  if (c.source) h += `<p class="src">Источник: ${esc(c.source)}</p>`;
+  if (c.material && findMaterial(c.material)) h += `<button class="link left" data-act="material">Открыть этот раздел в материалах</button>`;
+  return h;
+}
+function renderReview() {
+  const el = $('#v-review');
+  if (!R) { show('home'); return; }
+  if (R.finished) {
+    const more = buildSession(S.settings.scope, 'review').length;
+    el.innerHTML = `<header class="top"><span class="word">Зубр</span><span></span></header><div class="scroll">
+      <h1 class="lead">Сессия закончена</h1>
+      <p class="sub">С первого раза - ${R.first} из ${R.first + R.failed.size}.${R.failed.size ? ' Карточки с ошибкой вернутся завтра.' : ''}</p></div>
+      <div class="dock">${more && R.kind === 'review' ? `<button class="btn primary" data-act="start">Ещё сессия: ${cardsWord(more)}</button><button class="btn quiet" data-act="home">На главную</button>` : `<button class="btn primary" data-act="home">На главную</button>`}</div>`;
+    return;
+  }
+  const c = R.cur, left = R.queue.length + 1, pct = Math.round(R.done / (R.done + left) * 100);
+  const head = `<header class="top"><button class="link left" data-act="quit">Закончить</button><span class="hint">Осталось ${left}</span></header><div class="bar"><i style="width:${pct}%"></i></div>`;
+  const face = `<div class="icard-head">${esc(c.packTitle)}${c.topic && c.topic !== 'Без темы' ? ', ' + esc(c.topic) : ''}</div><div class="icard-q">${mdi(c.q)}</div>`;
+  let body, dock;
+  if (R.opts) {
+    const done = R.picked >= 0;
+    const opts = R.opts.map((o, i) => { const cls = done ? (o.ok ? ' right' : i === R.picked ? ' wrong' : '') : ''; const tag = done && o.ok ? '<span class="tag">Верный ответ</span>' : done && i === R.picked ? '<span class="tag">Твой ответ</span>' : ''; return `<button class="opt${cls}" data-act="pick" data-i="${i}" ${done ? 'disabled' : ''}>${tag}${mdi(o.t)}</button>`; }).join('');
+    const ok = done && R.opts[R.picked].ok;
+    body = `<article class="icard compact">${face}</article><div class="opts">${opts}</div>${done ? `<div class="reveal"><p class="verdict ${ok ? 'ok' : 'bad'}">${ok ? 'Верно' : 'Неверно'}</p>${cardExtras(c)}</div>` : ''}`;
+    dock = done ? `<button class="btn primary" data-act="next">Дальше</button>` : `<p class="hint" style="text-align:center">Выбери ответ</p>`;
+  } else {
+    body = `<article class="icard">${face}${R.revealed ? `<div class="icard-a reveal">${md(c.a)}</div>` : ''}</article>${R.revealed ? `<div class="reveal">${cardExtras(c)}</div>` : ''}`;
+    dock = R.revealed ? `<div class="pair"><button class="btn bad" data-act="grade" data-ok="0">Не знал</button><button class="btn ok" data-act="grade" data-ok="1">Знал</button></div>` : `<button class="btn primary" data-act="reveal">Показать ответ</button>`;
+  }
+  const keep = el.querySelector('.scroll') && (R.revealed || R.picked >= 0) ? el.querySelector('.scroll').scrollTop : 0;
+  el.innerHTML = head + `<div class="scroll">${body}</div><div class="dock">${dock}</div>`;
+  el.querySelector('.scroll').scrollTop = keep;
+}
+
+/* ---------- материалы ---------- */
+const matTitle = m => { const h = /^#\s+(.+)$/m.exec(m.text); return h ? h[1].trim() : m.path.split('/').pop().replace(/\.md$/i, ''); };
+const matGroup = m => { const p = m.path.split('/'); return p.length > 2 ? p[1] : ''; };
+function findMaterial(ref) {
+  const name = String(ref).split('#')[0].replace(/^\/+|^materials\//, '').replace(/\.md$/i, '').toLowerCase();
+  if (!name) return null;
+  const keys = Object.keys(S.materials);
+  return keys.find(k => k.toLowerCase() === 'materials/' + name + '.md') || keys.find(k => k.toLowerCase().endsWith('/' + name + '.md')) || null;
+}
+let MATS = [], matQuery = '';
+function renderMaterials() {
+  const el = $('#v-materials');
+  const all = Object.values(S.materials).sort((a, b) => a.path.localeCompare(b.path, 'ru'));
+  if (!all.length) {
+    el.innerHTML = topBar() + `<div class="scroll"><h1 class="lead">Материалов пока нет</h1><p class="sub">Положи конспекты в формате Markdown в папку materials репозитория. Схемы описываются текстом прямо в конспекте.</p><button class="btn quiet" data-act="import">Загрузить файл конспекта</button></div>`;
+    refreshChip(); return;
+  }
+  el.innerHTML = topBar() + `<div class="scroll"><h1 class="lead">Материалы</h1><div class="field" style="margin-top:14px"><input type="search" id="matq" placeholder="Поиск по конспектам" value="${esc(matQuery)}" aria-label="Поиск по конспектам"></div><div id="matlist"></div></div>`;
+  drawMatList(all); refreshChip();
+}
+function drawMatList(all) {
+  all ||= Object.values(S.materials).sort((a, b) => a.path.localeCompare(b.path, 'ru'));
+  const q = matQuery.trim().toLowerCase();
+  MATS = q ? all.filter(m => (matTitle(m) + '\n' + m.text).toLowerCase().includes(q)) : all;
+  let h = '', g = null;
+  MATS.forEach((m, i) => { const mg = matGroup(m); if (mg !== g) { if (g !== null) h += '</div>'; g = mg; h += (mg ? `<h2 class="h2">${esc(mg)}</h2>` : '') + '<div class="rows">'; } h += `<button class="row" data-act="openmat" data-i="${i}"><span class="t">${esc(matTitle(m))}</span><span class="go" aria-hidden="true">›</span></button>`; });
+  $('#matlist').innerHTML = MATS.length ? h + '</div>' : `<p class="hint">Ничего не найдено.</p>`;
+}
+let mermaidReady = null, readerBack = 'materials', readerPath = '', mmN = 0;
+function loadMermaid() {
+  return mermaidReady ||= new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'vendor/mermaid.min.js'; s.onload = () => res(); s.onerror = () => { mermaidReady = null; s.remove(); rej(new Error('load')); }; document.head.appendChild(s); });
+}
+function themeMermaid() {
+  const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', fontFamily: 'system-ui, -apple-system, sans-serif',
+    themeVariables: { fontSize: '15px', background: v('--card'), primaryColor: v('--paper'), primaryTextColor: v('--ink'), primaryBorderColor: v('--ink2'), lineColor: v('--ink2'), secondaryColor: v('--rule'), tertiaryColor: v('--card'), textColor: v('--ink'), mainBkg: v('--paper'), nodeBorder: v('--ink2'), clusterBkg: v('--card'), clusterBorder: v('--line'), edgeLabelBackground: v('--card'), titleColor: v('--ink') } });
+}
+async function openMaterial(path, anchor, back) {
+  const m = S.materials[path]; if (!m) { toast('Этого материала нет на телефоне'); return; }
+  readerBack = back || readerBack; readerPath = path;
+  const el = $('#v-reader');
+  el.innerHTML = `<header class="top"><button class="link left" data-act="readerback">Назад</button><span></span></header><div class="scroll"><div class="prose" id="prose"></div></div>`;
+  const box = $('#prose'); box.innerHTML = md(m.text.replace(/^\uFEFF/, ''));
+  box.querySelectorAll('h1,h2,h3,h4').forEach(h => { h.id = 'h-' + slug(h.textContent); });
+  box.querySelectorAll('table').forEach(t => { const w = document.createElement('div'); w.className = 'tw'; t.replaceWith(w); w.appendChild(t); });
+  const dir = path.split('/').slice(0, -1);
+  box.querySelectorAll('img').forEach(img => {
+    const src = img.getAttribute('src') || '';
+    if (/^(https?:|data:)/i.test(src)) return;
+    const parts = dir.slice(); for (const seg of decodeURI(src).split('/')) { if (seg === '..') parts.pop(); else if (seg && seg !== '.') parts.push(seg); }
+    const hit = S.images[parts.join('/')];
+    if (hit) img.src = hit.url; else { const s = document.createElement('span'); s.className = 'hint'; s.textContent = '[картинка ' + src + ' не загружена]'; img.replaceWith(s); }
+  });
+  show('reader');
+  const diagrams = [...box.querySelectorAll('pre > code.language-mermaid')];
+  if (diagrams.length) {
+    try {
+      await loadMermaid(); themeMermaid();
+      for (const code of diagrams) {
+        const holder = document.createElement('div'); holder.className = 'diagram';
+        try {
+          const { svg } = await mermaid.render('mm' + (++mmN), code.textContent); holder.innerHTML = svg; code.parentElement.replaceWith(holder);
+          const el = holder.querySelector('svg'), vb = el && el.viewBox && el.viewBox.baseVal;
+          if (vb && vb.width) { el.removeAttribute('width'); el.style.maxWidth = 'none'; el.style.width = Math.round(vb.width) + 'px'; el.style.height = Math.round(vb.height) + 'px'; }
+        }
+        catch (e) { document.getElementById('dmm' + mmN)?.remove(); const p = document.createElement('p'); p.className = 'err'; p.textContent = 'Схема не собралась: проверь её текст.'; code.parentElement.before(p); }
+      }
+    } catch { const p = document.createElement('p'); p.className = 'err'; p.textContent = 'Схемы появятся после первого запуска с интернетом.'; box.prepend(p); }
+  }
+  if (anchor) { const t = document.getElementById('h-' + slug(anchor)); if (t) { t.scrollIntoView(); t.classList.add('flash'); } }
+}
+
+/* ---------- настройки ---------- */
+let persisted = null;
+function renderSettings() {
+  const el = $('#v-settings'), s = S.settings;
+  const packs = Object.values(S.packs).sort((a, b) => a.key.localeCompare(b.key));
+  const nMat = Object.keys(S.materials).length, nProg = Object.keys(S.progress).length;
+  el.innerHTML = topBar() + `<div class="scroll">
+    <h1 class="lead">Настройки</h1>
+    <h2 class="h2">Репозиторий с данными</h2>
+    <p class="hint" style="margin-bottom:12px">Приватный репозиторий на GitHub, где лежат паки, материалы и файл с прогрессом.</p>
+    <label class="field"><span>Репозиторий</span><input id="s-repo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="логин/название" value="${esc(s.repo)}"></label>
+    <label class="field"><span>Токен доступа</span><input id="s-token" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_..." value="${esc(s.token)}"><small>Токен хранится только на этом телефоне.</small></label>
+    ${S.sync.error ? `<p class="err">${esc(S.sync.error)}</p>` : ''}
+    <button class="btn primary" data-act="savesync">${syncing ? 'Синхронизация…' : 'Сохранить и синхронизировать'}</button>
+    <p class="kv" style="margin-top:10px">${S.sync.last ? 'Последняя синхронизация: <b>' + niceDate(ymd(new Date(S.sync.last))) + ', ' + pad(new Date(S.sync.last).getHours()) + ':' + pad(new Date(S.sync.last).getMinutes()) + '</b>' : 'Синхронизации ещё не было.'}${S.sync.dirty ? ' Есть неотправленные ответы.' : ''}</p>
+
+    <h2 class="h2">Сессия</h2>
+    <div class="two"><label class="field"><span>Карточек за раз</span><input id="s-size" type="number" inputmode="numeric" min="1" max="500" value="${s.sessionSize}"></label>
+    <label class="field"><span>Из них новых</span><input id="s-new" type="number" inputmode="numeric" min="0" max="500" value="${s.newPerSession}"></label></div>
+
+    <h2 class="h2">На телефоне</h2>
+    <p class="kv">Паков: <b>${packs.length}</b>, карточек: <b>${IDX.cards.length}</b>, материалов: <b>${nMat}</b>, карточек с прогрессом: <b>${nProg}</b></p>
+    <p class="kv">Защита от очистки: <b>${persisted === null ? 'проверяю' : persisted ? 'включена' : 'не выдана'}</b>${persisted === false ? '. Открывай приложение с иконки на экране «Домой».' : ''}</p>
+    ${packs.length ? `<div class="rows" style="margin-top:10px">${packs.map((p, i) => `<div class="row"><span class="t">${esc(p.title)}<br><span class="hint">${cardsWord(p.cards.length)}, ${p.src === 'repo' ? 'из репозитория' : 'загружен из файла'}</span></span>${p.src === 'file' ? `<button class="link danger" style="width:auto" data-act="delpack" data-i="${i}">Удалить</button>` : ''}</div>`).join('')}</div>` : ''}
+    <div class="stackv" style="margin-top:16px">
+      <button class="btn quiet" data-act="import">Загрузить пак, конспект или бэкап</button>
+      <button class="btn quiet" data-act="backup">Сохранить бэкап в файл</button>
+      <button class="link danger" data-act="reset">Сбросить весь прогресс</button>
+    </div></div>`;
+  SETTINGS_PACKS = packs.map(p => p.key);
+  refreshChip();
+  if (persisted === null && navigator.storage?.persisted) navigator.storage.persisted().then(v => { persisted = v; if (VIEW === 'settings') renderSettings(); });
+}
+let SETTINGS_PACKS = [];
+function readSessionInputs() {
+  const a = parseInt($('#s-size')?.value, 10), b = parseInt($('#s-new')?.value, 10);
+  if (a > 0) S.settings.sessionSize = Math.min(500, a);
+  if (b >= 0) S.settings.newPerSession = Math.min(500, b);
+}
+function parseRepo(v) { const m = /(?:github\.com[/:])?([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(v.trim()); return m ? m[1] + '/' + m[2] : ''; }
+
+/* ---------- файлы: импорт и бэкап ---------- */
+async function importFiles(list) {
+  let packs = 0, mats = 0, restored = false; const bad = [];
+  for (const f of list) {
+    try {
+      const text = (await f.text()).replace(/^\uFEFF/, '');
+      if (/\.md$/i.test(f.name)) { const path = 'materials/' + f.name; if (S.materials[path]?.src === 'repo') { bad.push(f.name + ' (уже есть в репозитории)'); continue; } S.materials[path] = { path, src: 'file', sha: '', text }; mats++; continue; }
+      const raw = JSON.parse(text);
+      if (raw.kind === 'zubr-backup') {
+        for (const p of raw.packs || []) if (!S.packs[p.key]) { S.packs[p.key] = { ...p, src: 'file' }; packs++; }
+        for (const m of raw.materials || []) if (!S.materials[m.path]) { S.materials[m.path] = { ...m, src: 'file' }; mats++; }
+        if (mergeProgress(raw.progress || {}).pulled) markDirty();
+        restored = true; continue;
+      }
+      const key = 'packs/' + f.name;
+      if (S.packs[key]?.src === 'repo') { bad.push(f.name + ' (уже есть в репозитории)'); continue; }
+      const p = normPack(raw, f.name.replace(/\.json$/i, ''));
+      if (!p.cards.length) throw new Error('пусто');
+      S.packs[key] = { ...p, key, src: 'file', sha: '' }; packs++;
+    } catch { bad.push(f.name); }
+  }
+  await save('packs'); await save('materials'); await save('progress'); reindex();
+  const parts = []; if (packs) parts.push(packs + ' ' + plural(packs, ['пак', 'пака', 'паков'])); if (mats) parts.push(mats + ' ' + plural(mats, ['конспект', 'конспекта', 'конспектов'])); if (restored) parts.push('прогресс из бэкапа');
+  toast((parts.length ? 'Загружено: ' + parts.join(', ') + '. ' : '') + (bad.length ? 'Не прочитано: ' + bad.join(', ') : '') || 'Ничего не загружено');
+  show(VIEW);
+}
+async function backup() {
+  const data = JSON.stringify({ kind: 'zubr-backup', format: 1, created: new Date().toISOString(), progress: S.progress, packs: Object.values(S.packs), materials: Object.values(S.materials) });
+  const file = new File([data], 'zubr-backup-' + today() + '.json', { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
+
+/* ---------- действия ---------- */
+document.addEventListener('click', async ev => {
+  const link = ev.target.closest('#prose a');
+  if (link) {
+    ev.preventDefault();
+    const href = link.getAttribute('href') || '';
+    if (href.startsWith('#')) { const t = document.getElementById('h-' + slug(decodeURIComponent(href.slice(1)))); if (t) t.scrollIntoView(); return; }
+    if (/^https?:/i.test(href)) { window.open(href, '_blank', 'noopener'); return; }
+    const [file, anchor] = decodeURIComponent(href).split('#');
+    const dir = readerPath.split('/').slice(0, -1); for (const seg of file.split('/')) { if (seg === '..') dir.pop(); else if (seg && seg !== '.') dir.push(seg); }
+    const target = S.materials[dir.join('/')] ? dir.join('/') : findMaterial(file);
+    if (target) openMaterial(target, anchor); else toast('Такого материала нет на телефоне');
+    return;
+  }
+  const b = ev.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'tab') { if (VIEW === 'settings') { readSessionInputs(); save('settings'); } show(b.dataset.view); }
+  else if (act === 'chip') { if (configured()) sync({ manual: true }); else show('settings'); }
+  else if (act === 'scope') {
+    if (b.dataset.t != null) S.settings.scope = { ...HOME.topics[+b.dataset.t] };
+    else S.settings.scope = { pack: +b.dataset.p < 0 ? null : HOME.packs[+b.dataset.p], topic: null };
+    save('settings'); const y = $('#v-home .scroll').scrollTop; renderHome(); $('#v-home .scroll').scrollTop = y;
+  }
+  else if (act === 'start') startSession('review');
+  else if (act === 'startall') startSession('all');
+  else if (act === 'reveal') { R.revealed = true; renderReview(); }
+  else if (act === 'grade') grade(b.dataset.ok === '1');
+  else if (act === 'pick') { if (R.picked < 0) { R.picked = +b.dataset.i; renderReview(); } }
+  else if (act === 'next') grade(R.opts[R.picked].ok);
+  else if (act === 'quit' || act === 'home') { R = null; sync(); show('home'); }
+  else if (act === 'material') { const ref = R.cur.material; openMaterial(findMaterial(ref), ref.split('#')[1], 'review'); }
+  else if (act === 'openmat') openMaterial(MATS[+b.dataset.i].path, null, 'materials');
+  else if (act === 'readerback') show(readerBack);
+  else if (act === 'import') $('#file').click();
+  else if (act === 'backup') backup();
+  else if (act === 'savesync') {
+    readSessionInputs();
+    const repo = parseRepo($('#s-repo').value), token = $('#s-token').value.trim();
+    if ($('#s-repo').value.trim() && !repo) { toast('Репозиторий пишется как логин/название'); return; }
+    if (repo !== S.settings.repo) { S.sync = { last: 0, dirty: Object.keys(S.progress).length > 0, progressSha: '', error: '', reset: false }; for (const k of Object.keys(S.packs)) if (S.packs[k].src === 'repo') delete S.packs[k]; for (const k of Object.keys(S.materials)) if (S.materials[k].src === 'repo') delete S.materials[k]; S.images = {}; reindex(); await save('packs'); await save('materials'); await save('images'); }
+    S.settings.repo = repo; S.settings.token = token; S.sync.error = '';
+    await save('settings'); await save('sync');
+    if (!configured()) { toast('Сохранено. Без репозитория данные живут только на телефоне.'); renderSettings(); return; }
+    sync({ manual: true }); renderSettings();
+  }
+  else if (act === 'delpack') { const key = SETTINGS_PACKS[+b.dataset.i]; if (key && confirm('Удалить пак «' + S.packs[key].title + '» с телефона? Прогресс по его карточкам останется.')) { delete S.packs[key]; await save('packs'); reindex(); renderSettings(); } }
+  else if (act === 'reset') { if (confirm('Сбросить прогресс по всем карточкам? Это нельзя отменить.')) { S.progress = {}; S.sync.reset = true; S.sync.dirty = true; await save('progress'); await save('sync'); toast('Прогресс сброшен'); renderSettings(); sync(); } }
+});
+document.addEventListener('change', ev => {
+  if (ev.target.id === 'optmode') { S.settings.options = ev.target.checked; save('settings'); }
+  else if (ev.target.id === 'file') { const files = [...ev.target.files]; ev.target.value = ''; if (files.length) importFiles(files); }
+  else if (ev.target.id === 's-size' || ev.target.id === 's-new') { readSessionInputs(); save('settings'); }
+});
+document.addEventListener('input', ev => { if (ev.target.id === 'matq') { matQuery = ev.target.value; drawMatList(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { if (S.sync.dirty) sync(); } else if (Date.now() - S.sync.last > 300000 && !R) sync(); });
+addEventListener('online', () => sync());
+addEventListener('offline', refreshChip);
+
+/* ---------- запуск ---------- */
+(async () => {
+  await loadAll(); reindex(); show('home');
+  if (navigator.storage?.persist) navigator.storage.persist().then(v => { persisted = v; }).catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  sync();
+})();
+</script>
+</body>
+</html>
