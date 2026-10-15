@@ -1,5 +1,5 @@
 /* Зубр: офлайн-кэш. Сначала отдаём сохранённое, в фоне тихо обновляем. */
-const CACHE = 'zubr-v1';
+const CACHE = 'zubr-v3';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png', './vendor/marked.umd.js', './vendor/purify.min.js'];
 const HEAVY = ['./vendor/mermaid.min.js'];   // библиотека схем: большая, поэтому не блокирует установку
 

@@ -53,6 +53,10 @@ h1,h2,h3,p{margin:0}
 .tabs button[aria-current="page"]{color:var(--ink);font-weight:600;box-shadow:inset 0 2px 0 var(--ink)}
 
 .word{font:600 1.0625rem var(--serif);letter-spacing:.01em}
+.who{font-size:.8125rem;color:var(--ink2);margin-left:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:-4px 0 14px}
+.chips button{padding:8px 12px;border-radius:999px;border:1.5px solid var(--line);font-size:.875rem;min-height:38px}
+.chips button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 .chip{font-size:.8125rem;color:var(--ink2);padding:8px 0 8px 12px;text-align:right}
 .chip.warn{color:var(--bad)}
 .lead{font:600 1.875rem/1.15 var(--serif);margin:10px 0 6px;text-wrap:balance}
@@ -90,6 +94,18 @@ h1,h2,h3,p{margin:0}
 .cnt{flex:none;font-size:.875rem;min-width:2ch;text-align:right;font-variant-numeric:tabular-nums}
 .cnt.fresh{color:var(--ink2)}
 .row .go{color:var(--ink2);flex:none}
+.prow{display:flex;align-items:stretch;border-bottom:1px solid var(--line)}
+.prow .row{border-bottom:0;flex:1;min-width:0}
+.fold{flex:none;display:flex;align-items:center;gap:4px;padding:0 4px 0 12px;color:var(--ink2);font-size:.8125rem;min-width:52px;justify-content:flex-end;border-left:1px solid var(--rule)}
+.fold i{font-style:normal;font-size:1.25rem;line-height:1;display:inline-block;transition:transform .15s}
+.fold[aria-expanded="true"] i{transform:rotate(90deg)}
+.row .acts{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.row .acts .link{width:auto;padding:6px 0;font-size:.875rem}
+.pill{flex:none;padding:8px 14px;border-radius:999px;border:1.5px solid var(--accent);color:var(--accent);font-size:.875rem;font-weight:600;min-height:38px}
+.pill[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.tag2{display:inline-block;font-size:.75rem;font-weight:600;color:var(--ok);margin-top:2px}
+.tag2.wait{color:var(--ink2)}
+.cred{background:var(--card);border:1.5px solid var(--accent);border-radius:10px;padding:12px 14px;margin:12px 0;font:.9375rem/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 
 .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.9375rem;padding:2px 0}
 .switch input{appearance:none;-webkit-appearance:none;width:48px;height:28px;border-radius:14px;background:var(--line);position:relative;margin:0;flex:none;transition:background .15s}
@@ -167,10 +183,12 @@ h1,h2,h3,p{margin:0}
   <section class="view" id="v-review"></section>
   <section class="view tabbed" id="v-materials"></section>
   <section class="view" id="v-reader"></section>
+  <section class="view tabbed" id="v-catalog"></section>
   <section class="view tabbed" id="v-settings"></section>
   <nav class="tabs" id="tabs" aria-label="Разделы">
     <button data-act="tab" data-view="home">Карточки</button>
     <button data-act="tab" data-view="materials">Материалы</button>
+    <button data-act="tab" data-view="catalog">Каталог</button>
     <button data-act="tab" data-view="settings">Настройки</button>
   </nav>
 </div>
@@ -209,20 +227,39 @@ const DB = {
   async set(k, v) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); }
 };
 const S = {
-  settings: { repo: '', token: '', sessionSize: 20, newPerSession: 10, options: false, scope: { pack: null, topic: null } },
+  settings: { mode: '', repo: '', token: '', profile: '', profiles: [], server: '', login: '', session: '', admin: false, sessionSize: 20, newPerSession: 10, options: false, scope: { pack: null, topic: null } },
   packs: {},      // путь -> { key, src:'repo'|'file', sha, id, title, cards:[] }
   materials: {},  // путь -> { path, src, sha, text }
   images: {},     // путь -> { sha, url }
   progress: {},   // id карточки -> { box, due, ts, ok, bad }
+  subs: { ids: [], ts: 0 },   // какие паки каталога скачаны (режим сервера)
   sync: { last: 0, dirty: false, progressSha: '', error: '', reset: false }
 };
 let storageBroken = false;
-async function save(key) { try { await DB.set(key, S[key]); } catch (e) { if (!storageBroken) { storageBroken = true; toast('Телефон не даёт сохранять данные. Проверь свободное место.'); } } }
+const SYNC0 = { last: 0, dirty: false, progressSha: '', error: '', reset: false };
+const serverMode = () => S.settings.mode === 'server';
+const profKey = () => serverMode() ? (S.settings.login ? 'u-' + S.settings.login : '') : slug(String(S.settings.profile || '').normalize('NFC'));   // '' - основной профиль
+const pKey = k => (k === 'progress' || k === 'sync' || k === 'subs') && profKey() ? k + ':' + profKey() : k;   // прогресс у каждого профиля свой
+const progressPath = () => profKey() ? 'progress/' + profKey() + '.json' : 'progress.json';
+async function save(key) { try { await DB.set(pKey(key), S[key]); } catch (e) { if (!storageBroken) { storageBroken = true; toast('Телефон не даёт сохранять данные. Проверь свободное место.'); } } }
 async function loadAll() {
   for (const k of Object.keys(S)) {
-    try { const v = await DB.get(k); if (v && typeof v === 'object') S[k] = k === 'settings' || k === 'sync' ? { ...S[k], ...v } : v; } catch { storageBroken = true; }
+    try { const v = await DB.get(pKey(k)); if (v && typeof v === 'object') S[k] = k === 'settings' || k === 'sync' ? { ...S[k], ...v } : v; } catch { storageBroken = true; }
   }
   if (!S.settings.scope) S.settings.scope = { pack: null, topic: null };
+}
+async function switchProfile(name) {
+  S.settings.profile = name; await save('settings');
+  await loadProfile();
+}
+async function loadProfile() {
+  let p = null, y = null;
+  try { p = await DB.get(pKey('progress')); y = await DB.get(pKey('sync')); } catch {}
+  let u = null; try { u = await DB.get(pKey('subs')); } catch {}
+  S.progress = p && typeof p === 'object' ? p : {};
+  S.subs = u && Array.isArray(u.ids) ? u : { ids: [], ts: 0 };
+  S.sync = { ...SYNC0, ...(y && typeof y === 'object' ? y : {}), error: '' };
+  if (Object.keys(S.progress).length && !S.sync.last) S.sync.dirty = true;
 }
 
 /* ---------- паки и карточки ---------- */
@@ -285,7 +322,7 @@ function mergeProgress(remote) {
 }
 
 /* ---------- синхронизация с GitHub ---------- */
-const configured = () => !!(S.settings.repo && S.settings.token);
+const configured = () => serverMode() ? !!(S.settings.server && S.settings.session) : !!(S.settings.repo && S.settings.token);
 async function gh(path, { method = 'GET', body, as = 'json' } = {}) {
   const headers = { Authorization: 'Bearer ' + S.settings.token, Accept: as === 'json' ? 'application/vnd.github+json' : 'application/vnd.github.raw+json' };
   if (body) headers['Content-Type'] = 'application/json';
@@ -306,6 +343,102 @@ let syncing = false, syncTimer = 0;
 async function sync(opts = {}) {
   if (!configured() || syncing) return;
   if (!navigator.onLine) { if (opts.manual) toast('Нет сети. Отправлю, когда появится.'); return; }
+  return serverMode() ? syncServer(opts) : syncGithub(opts);
+}
+
+/* ---------- синхронизация через сервер (логин и пароль) ---------- */
+async function api(act, data = {}) {
+  let r;
+  try { r = await fetch(S.settings.server, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ act, session: S.settings.session, ...data }), cache: 'no-store' }); }
+  catch { const e = new Error('Нет связи с сервером.'); e.status = 0; throw e; }
+  let j = {}; try { j = await r.json(); } catch {}
+  if (!r.ok) { const e = new Error(j.error || 'Сервер ответил ошибкой ' + r.status + '.'); e.status = r.status; e.data = j; throw e; }
+  return j;
+}
+function apiErrorText(e) {
+  if (e.status === 401) return 'Сессия закончилась. Войди заново в настройках.';
+  if (e.status === 403 && /functions|Forbidden/i.test(e.message)) return 'Сервер выключен. Напиши администратору.';
+  return e.message;
+}
+let CAT = { catalog: [], mySugg: [], suggestions: 0 };   // последний ответ сервера про каталог
+const isImg = p => /\.(png|jpe?g|gif|webp|svg)$/i.test(p);
+async function syncServer(opts) {
+  syncing = true; refreshChip();
+  let changed = false;
+  try {
+    const L = await api('sync');
+    CAT = { catalog: L.catalog || [], mySugg: L.mySuggestions || [], suggestions: L.suggestions || 0 };
+    DB.set('cat', CAT).catch(() => {});
+    if (S.settings.admin !== !!L.admin) { S.settings.admin = !!L.admin; await save('settings'); }
+    // 1. прогресс с сервера (или из старого файла при первом входе)
+    const P = L.progress || {};
+    let push = S.sync.dirty || S.sync.reset;
+    const src = P.sha ? P.path : P.legacy, srcSha = P.sha || P.legacySha;
+    if (S.sync.reset) push = true;
+    else if (src && srcSha !== S.sync.progressSha) {
+      const g = await api('get', { paths: [src] });
+      let doc = {}; try { doc = JSON.parse(g.files[src].text); } catch {}
+      const m = mergeProgress(doc.cards || {});
+      if (m.pulled) { await save('progress'); changed = true; }
+      if (m.ahead) push = true;
+      if (doc.subs && Array.isArray(doc.subs.ids) && (doc.subs.ts || 0) > (S.subs.ts || 0)) { S.subs = { ids: doc.subs.ids.map(String), ts: doc.subs.ts }; await save('subs'); }
+      else if ((S.subs.ts || 0) > ((doc.subs && doc.subs.ts) || 0)) push = true;
+    }
+    if (!P.sha) push = push || Object.keys(S.progress).length > 0 || S.subs.ts > 0;
+    if (!S.subs.ts && Object.keys(S.progress).length && CAT.catalog.length) { S.subs = { ids: CAT.catalog.map(c => c.id), ts: Date.now() }; await save('subs'); push = true; }
+    // 2. какие файлы должны быть на телефоне
+    const subs = new Set(S.subs.ids), want = new Map();
+    const folders = new Set();
+    const packFolders = new Set();   // папки материалов, которые принадлежат какому-то паку каталога
+    for (const c of CAT.catalog) { packFolders.add(c.folder); packFolders.add(c.id); if (subs.has(c.id)) { want.set(c.path, c.sha); folders.add(c.folder); folders.add(c.id); } }
+    // материалы вне папок паков (например, «Законы») доступны всем, папки паков - только по подписке
+    for (const f of L.files || []) { const rest = f.path.slice('materials/'.length); const top = rest.includes('/') ? rest.split('/')[0] : ''; if (!top ? !isImg(f.path) : folders.has(top) || !packFolders.has(top)) want.set(f.path, f.sha); }
+    for (const f of L.own || []) want.set(f.path, f.sha);
+    for (const k of Object.keys(S.packs)) if ((S.packs[k].src === 'server') && !want.has(k)) { delete S.packs[k]; changed = true; }
+    for (const k of Object.keys(S.materials)) if ((S.materials[k].src === 'server') && !want.has(k)) { delete S.materials[k]; changed = true; }
+    let imgChanged = false;
+    for (const k of Object.keys(S.images)) if (!want.has(k)) { delete S.images[k]; imgChanged = true; }
+    const localSha = p => (S.packs[p] && S.packs[p].src === 'server' && S.packs[p].sha) || (S.materials[p] && S.materials[p].src === 'server' && S.materials[p].sha) || (S.images[p] && S.images[p].sha) || '';
+    let need = [...want].filter(([p, sha]) => localSha(p) !== sha).map(([p]) => p);
+    const bad = [];
+    for (let guard = 0; need.length && guard < 50; guard++) {
+      const g = await api('get', { paths: need.slice(0, 200) });
+      for (const [p, f] of Object.entries(g.files || {})) {
+        if (!f) continue;
+        if (/\.json$/i.test(p)) {
+          try { const pk = normPack(JSON.parse(f.text.replace(/^\uFEFF/, '')), p.split('/').pop().replace(/\.json$/i, '')); S.packs[p] = { ...pk, key: p, src: 'server', sha: f.sha, own: p.startsWith('users/') }; changed = true; }
+          catch { bad.push(p); }
+        } else if (isImg(p)) { S.images[p] = { sha: f.sha, url: 'data:' + MIME[p.split('.').pop().toLowerCase()] + ';base64,' + f.b64 }; imgChanged = true; }
+        else { S.materials[p] = { path: p, src: 'server', sha: f.sha, text: f.text }; changed = true; }
+      }
+      need = (g.more || []).concat(need.slice(200));
+    }
+    if (changed) { await save('packs'); await save('materials'); reindex(); }
+    if (imgChanged) await save('images');
+    // 3. отправить прогресс
+    let sha = P.sha || '';
+    if (push) {
+      const stamp = Date.now();
+      try { sha = (await api('putProgress', { base: sha, force: !!S.sync.reset, doc: { cards: S.progress, subs: S.subs } })).sha; }
+      catch (e) { if (e.status === 409) e.conflict = true; throw e; }
+      if (!(S.sync.dirtyAt > stamp)) S.sync.dirty = false;
+      S.sync.reset = false;
+    }
+    S.sync.progressSha = sha; S.sync.last = Date.now();
+    S.sync.error = bad.length ? 'Не удалось прочитать: ' + bad.join(', ') + '.' : '';
+    await save('sync');
+    if (opts.manual) toast(S.sync.error ? 'Синхронизировано, но не всё прочиталось' : 'Синхронизировано');
+  } catch (e) {
+    if (e.conflict && !opts.retried) { syncing = false; S.sync.progressSha = ''; return await syncServer({ ...opts, retried: true }); }
+    if (e.status === 401) { S.settings.session = ''; await save('settings'); }
+    S.sync.error = apiErrorText(e); await save('sync');
+    if (opts.manual) toast(S.sync.error);
+  } finally { syncing = false; }
+  if (changed && (VIEW === 'home' || VIEW === 'materials')) show(VIEW); else if (VIEW === 'settings' || VIEW === 'catalog') show(VIEW); else refreshChip();
+}
+
+/* ---------- синхронизация напрямую с GitHub (токен) ---------- */
+async function syncGithub(opts) {
   syncing = true; refreshChip();
   const repo = '/repos/' + S.settings.repo;
   let changed = false;
@@ -346,7 +479,9 @@ async function sync(opts = {}) {
     if (changed) { await save('packs'); await save('materials'); reindex(); }
     if (imgChanged) await save('images');
     // прогресс: забрать, слить по свежести, отправить
-    const pf = byPath['progress.json'];
+    const ppath = progressPath();
+    const known = files.filter(f => f.path === 'progress.json' || /^progress\/[^/]+\.json$/.test(f.path)).map(f => f.path === 'progress.json' ? '' : f.path.slice(9, -5)).sort();
+    const pf = byPath[ppath];
     let sha = pf ? pf.sha : '';
     let push = S.sync.dirty || S.sync.reset;
     if (pf && !S.sync.reset && pf.sha !== S.sync.progressSha) {
@@ -360,15 +495,17 @@ async function sync(opts = {}) {
     if (!pf && Object.keys(S.progress).length) push = true;
     if (push) {
       const stamp = Date.now();
-      const body = { message: 'Прогресс ' + new Date().toISOString().slice(0, 16).replace('T', ' '), content: b64(JSON.stringify({ format: 1, updated: new Date().toISOString(), cards: S.progress })), branch };
+      const body = { message: 'Прогресс ' + (profKey() ? profKey() + ' ' : '') + new Date().toISOString().slice(0, 16).replace('T', ' '), content: b64(JSON.stringify({ format: 1, updated: new Date().toISOString(), cards: S.progress })), branch };
       if (sha) body.sha = sha;
       let res;
-      try { res = await gh(repo + '/contents/progress.json', { method: 'PUT', body }); }
+      try { res = await gh(repo + '/contents/' + ppath.split('/').map(encodeURIComponent).join('/'), { method: 'PUT', body }); }
       catch (e) { if (e.status === 409 || e.status === 422) e.conflict = true; throw e; }
       sha = res.content.sha;
       if (!(S.sync.dirtyAt > stamp)) S.sync.dirty = false;
       S.sync.reset = false;
+      if (!known.includes(profKey())) { known.push(profKey()); known.sort(); }
     }
+    if (JSON.stringify(known) !== JSON.stringify(S.settings.profiles || [])) { S.settings.profiles = known; await save('settings'); }
     S.sync.progressSha = sha; S.sync.last = Date.now();
     S.sync.error = bad.length ? 'Не удалось прочитать: ' + bad.join(', ') + '. Проверь, что это правильный JSON.' : '';
     await save('sync');
@@ -382,7 +519,7 @@ async function sync(opts = {}) {
 }
 function markDirty() { S.sync.dirty = true; S.sync.dirtyAt = Date.now(); save('sync'); clearTimeout(syncTimer); syncTimer = setTimeout(() => sync(), 60000); }
 function chipText() {
-  if (!configured()) return ['Только на этом телефоне', false];
+  if (!configured()) return [serverMode() && S.settings.login ? 'Нужно войти' : 'Только на этом телефоне', serverMode() && !!S.settings.login];
   if (syncing) return ['Синхронизация…', false];
   if (S.sync.error) return ['Ошибка синхронизации', true];
   if (S.sync.dirty) return [navigator.onLine ? 'Есть неотправленное' : 'Офлайн, отправлю позже', false];
@@ -397,20 +534,21 @@ let VIEW = 'home';
 function show(v) {
   VIEW = v;
   document.querySelectorAll('.view').forEach(e => e.classList.toggle('on', e.id === 'v-' + v));
-  const tabbed = v === 'home' || v === 'materials' || v === 'settings';
+  const tabbed = v === 'home' || v === 'materials' || v === 'settings' || v === 'catalog';
   $('#tabs').classList.toggle('on', tabbed);
   document.querySelectorAll('#tabs button').forEach(b => b.dataset.view === v ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
-  ({ home: renderHome, review: renderReview, materials: renderMaterials, settings: renderSettings, reader: () => {} })[v]();
+  ({ home: renderHome, review: renderReview, materials: renderMaterials, catalog: renderCatalog, settings: renderSettings, reader: () => {} })[v]();
 }
-const topBar = () => `<header class="top"><span class="word">Зубр</span><button class="chip" id="chip" data-act="chip"></button></header>`;
+const whoName = () => serverMode() ? (S.settings.session ? S.settings.login : '') : S.settings.profile;
+const topBar = () => `<header class="top"><span><span class="word">Зубр</span>${whoName() ? `<span class="who">${esc(whoName())}</span>` : ''}</span><button class="chip" id="chip" data-act="chip"></button></header>`;
 
 let HOME = { packs: [], topics: [] };
 function renderHome() {
   const el = $('#v-home');
   if (!IDX.cards.length) {
     el.innerHTML = topBar() + `<div class="scroll"><h1 class="lead">Карточек пока нет</h1>
-      <p class="sub">${configured() ? 'В репозитории нет паков. Положи JSON-файл в папку packs и нажми «Синхронизировать» в настройках.' : 'Подключи репозиторий с паками или загрузи файл пака с телефона.'}</p>
-      <div class="stackv"><button class="btn primary" data-act="tab" data-view="settings">Открыть настройки</button><button class="btn quiet" data-act="import">Загрузить файл пака</button></div></div>`;
+      <p class="sub">${serverMode() && configured() ? 'Добавь паки из каталога - они скачаются на телефон и будут работать без интернета.' : configured() ? 'В репозитории нет паков. Положи JSON-файл в папку packs и нажми «Синхронизировать» в настройках.' : 'Войди в аккаунт в настройках или загрузи файл пака с телефона.'}</p>
+      <div class="stackv">${serverMode() && configured() ? '<button class="btn primary" data-act="tab" data-view="catalog">Открыть каталог</button>' : '<button class="btn primary" data-act="tab" data-view="settings">Открыть настройки</button><button class="btn quiet" data-act="import">Загрузить файл пака</button>'}</div></div>`;
     refreshChip(); return;
   }
   const sc = S.settings.scope, cs = scopeCards(sc), k = counts(cs), session = buildSession(sc, 'review');
@@ -424,14 +562,16 @@ function renderHome() {
   HOME = { packs: Object.keys(S.packs).sort(), topics: [] };
   const rowHtml = (cls, pressed, attrs, title, c) => `<button class="row ${cls}" aria-pressed="${pressed}" data-act="scope" ${attrs}><span class="dot"></span><span class="t">${esc(title)}</span><span class="cnt" title="повторить">${c.due || ''}</span><span class="cnt fresh" title="новые">${c.fresh ? '+' + c.fresh : ''}</span></button>`;
   let rows = HOME.packs.length > 1 ? rowHtml('', !sc.pack, 'data-p="-1"', 'Все паки', counts(IDX.cards)) : '';
+  const open = S.settings.open || {};
   HOME.packs.forEach((key, i) => {
     const p = S.packs[key], pc = IDX.cards.filter(c => c.packKey === key);
     const selected = sc.pack === key || HOME.packs.length === 1;
-    rows += rowHtml('', selected && !sc.topic, `data-p="${i}"`, p.title, counts(pc));
-    if (selected) {
-      const topics = [...new Set(pc.map(c => c.topic))];
-      if (topics.length > 1) topics.forEach(tp => { const j = HOME.topics.push({ pack: key, topic: tp }) - 1; rows += rowHtml('sub-row', sc.pack === key && sc.topic === tp, `data-t="${j}"`, tp, counts(pc.filter(c => c.topic === tp))); });
-    }
+    const topics = [...new Set(pc.map(c => c.topic))];
+    const isOpen = !!open[key] && topics.length > 1;
+    const title = !isOpen && sc.pack === key && sc.topic ? p.title + ': ' + sc.topic : p.title;
+    const row = rowHtml('', selected && (!sc.topic || !isOpen), `data-p="${i}"`, title, counts(!isOpen && sc.pack === key && sc.topic ? pc.filter(c => c.topic === sc.topic) : pc));
+    rows += topics.length > 1 ? `<div class="prow">${row}<button class="fold" data-act="fold" data-p="${i}" aria-expanded="${isOpen}" aria-label="${isOpen ? 'Свернуть' : 'Развернуть'} темы: ${topics.length}"><span>${topics.length}</span><i aria-hidden="true">›</i></button></div>` : row;
+    if (isOpen) topics.forEach(tp => { const j = HOME.topics.push({ pack: key, topic: tp }) - 1; rows += rowHtml('sub-row', sc.pack === key && sc.topic === tp, `data-t="${j}"`, tp, counts(pc.filter(c => c.topic === tp))); });
   });
   const hint = navigator.standalone === false ? `<p class="notice">Добавь приложение на экран «Домой»: кнопка «Поделиться» в Safari, затем «На экран Домой». Открывай его только с иконки, иначе Safari может стереть данные.</p>` : '';
   el.innerHTML = topBar() + `<div class="scroll">${hint}
@@ -450,6 +590,11 @@ function renderHome() {
 
 /* ---------- повторение ---------- */
 let R = null;
+function startCustom(cards) {
+  if (!cards || !cards.length) { toast('К этому материалу нет карточек'); return; }
+  R = { kind: 'all', queue: shuffle(cards.slice()), done: 0, first: 0, failed: new Set(), cur: null, revealed: false, opts: null, picked: -1, finished: false };
+  nextCard(); show('review');
+}
 function startSession(kind) {
   const queue = buildSession(S.settings.scope, kind);
   if (!queue.length) { toast('В этом разделе нет карточек'); return; }
@@ -480,8 +625,9 @@ function grade(ok) {
 function cardExtras(c) {
   let h = '';
   if (c.explain) h += `<div class="note"><h3>Пояснение</h3>${md(c.explain)}</div>`;
-  if (c.source) h += `<p class="src">Источник: ${esc(c.source)}</p>`;
-  if (c.material && findMaterial(c.material)) h += `<button class="link left" data-act="material">Открыть этот раздел в материалах</button>`;
+  if (c.source) h += `<p class="src">${/^(Не цитата|Краткий пересказ)/.test(c.source) ? '' : 'Источник: '}${esc(c.source)}</p>`;
+  const mk = c.material && findMaterial(c.material);
+  if (mk) h += `<button class="link left" data-act="material">Материал: ${esc(matTitle(S.materials[mk]))}</button>`;
   return h;
 }
 function renderReview() {
@@ -516,7 +662,8 @@ function renderReview() {
 
 /* ---------- материалы ---------- */
 const matTitle = m => { const h = /^#\s+(.+)$/m.exec(m.text); return h ? h[1].trim() : m.path.split('/').pop().replace(/\.md$/i, ''); };
-const matGroup = m => { const p = m.path.split('/'); return p.length > 2 ? p[1] : ''; };
+const relOf = p => p.replace(/^users\/[^/]+\//, '').replace(/^materials\//, '');
+const matGroup = m => { const p = relOf(m.path).split('/'); return p.length > 1 ? p[0] : ''; };
 function findMaterial(ref) {
   const name = String(ref).split('#')[0].replace(/^\/+|^materials\//, '').replace(/\.md$/i, '').toLowerCase();
   if (!name) return null;
@@ -539,23 +686,24 @@ function drawMatList(all) {
   const q = matQuery.trim().toLowerCase();
   MATS = q ? all.filter(m => (matTitle(m) + '\n' + m.text).toLowerCase().includes(q)) : all;
   let h = '', g = null;
-  MATS.forEach((m, i) => { const mg = matGroup(m); if (mg !== g) { if (g !== null) h += '</div>'; g = mg; h += (mg ? `<h2 class="h2">${esc(mg)}</h2>` : '') + '<div class="rows">'; } h += `<button class="row" data-act="openmat" data-i="${i}"><span class="t">${esc(matTitle(m))}</span><span class="go" aria-hidden="true">›</span></button>`; });
+  MATS.forEach((m, i) => { const mg = matGroup(m); if (mg !== g) { if (g !== null) h += '</div>'; g = mg; h += (mg ? `<h2 class="h2">${esc((Object.values(S.packs).find(p => p.id === mg) || {}).title || mg)}</h2>` : '') + '<div class="rows">'; } h += `<button class="row" data-act="openmat" data-i="${i}"><span class="t">${esc(matTitle(m))}</span><span class="go" aria-hidden="true">›</span></button>`; });
   $('#matlist').innerHTML = MATS.length ? h + '</div>' : `<p class="hint">Ничего не найдено.</p>`;
 }
-let mermaidReady = null, readerBack = 'materials', readerPath = '', mmN = 0;
+let mermaidReady = null, readerBack = 'materials', readerPath = '', mmN = 0, READER_CARDS = [];
 function loadMermaid() {
   return mermaidReady ||= new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'vendor/mermaid.min.js'; s.onload = () => res(); s.onerror = () => { mermaidReady = null; s.remove(); rej(new Error('load')); }; document.head.appendChild(s); });
 }
 function themeMermaid() {
   const v = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', fontFamily: 'system-ui, -apple-system, sans-serif',
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', fontFamily: 'system-ui, -apple-system, sans-serif', flowchart: { nodeSpacing: 18, rankSpacing: 34, padding: 8, wrappingWidth: 150 },
     themeVariables: { fontSize: '15px', background: v('--card'), primaryColor: v('--paper'), primaryTextColor: v('--ink'), primaryBorderColor: v('--ink2'), lineColor: v('--ink2'), secondaryColor: v('--rule'), tertiaryColor: v('--card'), textColor: v('--ink'), mainBkg: v('--paper'), nodeBorder: v('--ink2'), clusterBkg: v('--card'), clusterBorder: v('--line'), edgeLabelBackground: v('--card'), titleColor: v('--ink') } });
 }
 async function openMaterial(path, anchor, back) {
   const m = S.materials[path]; if (!m) { toast('Этого материала нет на телефоне'); return; }
   readerBack = back || readerBack; readerPath = path;
   const el = $('#v-reader');
-  el.innerHTML = `<header class="top"><button class="link left" data-act="readerback">Назад</button><span></span></header><div class="scroll"><div class="prose" id="prose"></div></div>`;
+  READER_CARDS = readerBack === 'materials' ? IDX.cards.filter(c => c.material && findMaterial(c.material) === path) : [];
+  el.innerHTML = `<header class="top"><button class="link left" data-act="readerback">Назад</button><span></span></header><div class="scroll"><div class="prose" id="prose"></div></div>${READER_CARDS.length ? `<div class="dock"><button class="btn primary" data-act="matcards">Повторить карточки к материалу: ${READER_CARDS.length}</button></div>` : ''}`;
   const box = $('#prose'); box.innerHTML = md(m.text.replace(/^\uFEFF/, ''));
   box.querySelectorAll('h1,h2,h3,h4').forEach(h => { h.id = 'h-' + slug(h.textContent); });
   box.querySelectorAll('table').forEach(t => { const w = document.createElement('div'); w.className = 'tw'; t.replaceWith(w); w.appendChild(t); });
@@ -586,21 +734,128 @@ async function openMaterial(path, anchor, back) {
   if (anchor) { const t = document.getElementById('h-' + slug(anchor)); if (t) { t.scrollIntoView(); t.classList.add('flash'); } }
 }
 
+/* ---------- каталог ---------- */
+let SUGG = null, OWN = [], OWNMAT = [], CATV = [];
+async function loadSugg() {
+  try { SUGG = (await api('suggestions')).items || []; } catch (e) { SUGG = []; toast(apiErrorText(e)); }
+  if (VIEW === 'catalog') renderCatalog();
+}
+function renderCatalog() {
+  const el = $('#v-catalog');
+  if (!serverMode() || !configured()) {
+    el.innerHTML = topBar() + `<div class="scroll"><h1 class="lead">Каталог</h1><p class="sub">Каталог общих паков открывается после входа по логину и паролю.</p><button class="btn primary" data-act="tab" data-view="settings">Открыть настройки</button></div>`;
+    refreshChip(); return;
+  }
+  const subs = new Set(S.subs.ids), me = S.settings.login;
+  CATV = CAT.catalog;
+  let h = `<div class="scroll"><h1 class="lead">Каталог</h1><p class="sub">Общие паки. Добавленные скачиваются на телефон и работают без интернета.</p>`;
+  if (!CATV.length) h += `<p class="hint">${S.sync.last ? 'В каталоге пока пусто.' : 'Загружаю…'}</p>`;
+  else h += `<div class="rows">${CATV.map((c, i) => `<div class="row"><span class="t">${esc(c.title)}<br><span class="hint">${cardsWord(c.cards)}${c.author ? ', автор ' + esc(c.author) : ''}</span></span><button class="pill" aria-pressed="${subs.has(c.id)}" data-act="sub" data-i="${i}">${subs.has(c.id) ? 'Добавлен' : 'Добавить'}</button></div>`).join('')}</div>`;
+  OWN = Object.values(S.packs).filter(p => p.src === 'server' && p.own).sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+  const packIds = new Set(OWN.map(p => p.id));
+  OWNMAT = Object.values(S.materials).filter(m => m.src === 'server' && m.path.startsWith('users/') && !packIds.has(matGroup(m))).sort((a, b) => a.path.localeCompare(b.path, 'ru'));
+  h += `<h2 class="h2">Мои паки</h2><p class="hint" style="margin-bottom:10px">Видны только тебе. Пак можно предложить в каталог - после одобрения его увидят все.</p>`;
+  if (OWN.length || OWNMAT.length) {
+    h += `<div class="rows">${OWN.map((p, i) => {
+      const published = CATV.some(c => c.id === p.id && c.author === me), pending = CAT.mySugg.includes(p.id);
+      const tag = pending ? '<span class="tag2 wait">На рассмотрении</span>' : published ? '<span class="tag2">В каталоге</span>' : '';
+      return `<div class="row"><span class="t">${esc(p.title)}<br><span class="hint">${cardsWord(p.cards.length)}</span>${tag ? '<br>' + tag : ''}</span><span class="acts"><button class="link" data-act="suggest" data-i="${i}" data-on="${pending ? 0 : 1}">${pending ? 'Отозвать' : published ? 'Обновить в каталоге' : 'Предложить в каталог'}</button><button class="link danger" data-act="delown" data-i="${i}">Удалить</button></span></div>`;
+    }).join('')}${OWNMAT.map((m, i) => `<div class="row"><span class="t">${esc(matTitle(m))}<br><span class="hint">конспект</span></span><span class="acts"><button class="link danger" data-act="delownmat" data-i="${i}">Удалить</button></span></div>`).join('')}</div>`;
+  }
+  h += `<div class="stackv" style="margin-top:14px"><button class="btn quiet" data-act="upload">Загрузить свой пак или конспект</button></div>
+    <p class="hint" style="margin-top:8px">Пак - файл .json, конспект - .md. Пак с тем же pack.id заменяет прежнюю версию.</p>`;
+  if (S.settings.admin) {
+    if (SUGG === null) { SUGG = 'loading'; loadSugg(); }
+    h += `<h2 class="h2">Предложения в каталог</h2>`;
+    h += !Array.isArray(SUGG) ? `<p class="hint">Загружаю…</p>` : !SUGG.length ? `<p class="hint">Новых предложений нет.</p>` : `<div class="rows">${SUGG.map((x, i) => `<div class="row"><span class="t">${esc(x.title)}<br><span class="hint">от ${esc(x.login)}, ${cardsWord(x.cards)}${x.materials ? ', материалов: ' + x.materials : ''}${x.replaces ? '. Заменит версию в каталоге' : ''}</span>${x.note ? `<br><span class="hint">${esc(x.note)}</span>` : ''}</span><span class="acts"><button class="link" data-act="publish" data-i="${i}">Опубликовать</button><button class="link danger" data-act="reject" data-i="${i}">Отклонить</button></span></div>`).join('')}</div>`;
+  }
+  const y = el.querySelector('.scroll') ? el.querySelector('.scroll').scrollTop : 0;
+  el.innerHTML = topBar() + h + '</div>';
+  el.querySelector('.scroll').scrollTop = y;
+  refreshChip();
+}
+async function uploadFiles(list) {
+  const ok = [], bad = [];
+  toast('Загружаю…');
+  for (const f of list) {
+    try {
+      if (f.size > 1.5e6) throw new Error('больше 1,5 МБ');
+      const r = await api('upload', { name: f.name, text: (await f.text()).replace(/^\uFEFF/, '') });
+      ok.push(r.cards ? f.name + ' (' + cardsWord(r.cards) + ')' : f.name);
+    } catch (e) { bad.push(f.name + ': ' + apiErrorText(e)); }
+  }
+  await sync();
+  toast((ok.length ? 'Загружено: ' + ok.join(', ') + '. ' : '') + (bad.length ? 'Не загружено: ' + bad.join('; ') : ''));
+  if (VIEW === 'catalog') renderCatalog();
+}
+function dropRemote() {
+  for (const k of Object.keys(S.packs)) if (S.packs[k].src === 'repo' || S.packs[k].src === 'server') delete S.packs[k];
+  for (const k of Object.keys(S.materials)) if (S.materials[k].src === 'repo' || S.materials[k].src === 'server') delete S.materials[k];
+  S.images = {}; save('packs'); save('materials'); save('images'); reindex();
+}
+let uploadMode = false;
+async function act2(fn, done) {
+  try { const r = await fn(); if (done) toast(done); await sync(); return r; } catch (e) { toast(apiErrorText(e)); }
+}
+
 /* ---------- настройки ---------- */
-let persisted = null;
+let persisted = null, SETMODE = '', USERS = null, CRED = null, PWOPEN = false;
+const genPassword = () => { const a = 'abcdefghijkmnpqrstuvwxyz23456789'; const r = crypto.getRandomValues(new Uint32Array(12)); let s = ''; for (let i = 0; i < 12; i++) { s += a[r[i] % a.length]; if (i === 3 || i === 7) s += '-'; } return s; };
+async function loadUsers() {
+  try { USERS = (await api('users')).users || []; } catch (e) { USERS = []; toast(apiErrorText(e)); }
+  if (VIEW === 'settings') renderSettings();
+}
+function serverBlock(s) {
+  let h = '';
+  if (!s.session) {
+    h += `<p class="hint" style="margin-bottom:12px">Логин и пароль выдаёт администратор вместе с адресом сервера.</p>
+    <label class="field"><span>Адрес сервера</span><input id="s-server" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://functions.yandexcloud.net/..." value="${esc(s.server)}"></label>
+    <label class="field"><span>Логин</span><input id="s-login" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" value="${esc(s.login)}"></label>
+    <label class="field"><span>Пароль</span><input id="s-pass" type="password" autocomplete="current-password"></label>
+    ${S.sync.error ? `<p class="err">${esc(S.sync.error)}</p>` : ''}
+    <button class="btn primary" data-act="login">Войти</button>`;
+    return h;
+  }
+  h += `<p class="kv">Ты вошёл как <b>${esc(s.login)}</b>${s.admin ? ', администратор' : ''}.</p>
+    ${S.sync.error ? `<p class="err">${esc(S.sync.error)}</p>` : ''}
+    <button class="btn primary" style="margin-top:10px" data-act="savesync">${syncing ? 'Синхронизация…' : 'Синхронизировать'}</button>
+    <p class="kv" style="margin-top:10px">${lastSyncText()}</p>`;
+  if (!s.admin) {
+    h += PWOPEN ? `<div style="margin-top:14px"><label class="field"><span>Старый пароль</span><input id="s-old" type="password" autocomplete="current-password"></label>
+      <label class="field"><span>Новый пароль</span><input id="s-new1" type="password" autocomplete="new-password"><small>Не короче 8 символов.</small></label>
+      <div class="pair"><button class="btn quiet" data-act="pwcancel">Отмена</button><button class="btn primary" data-act="passwd">Сменить</button></div></div>`
+      : `<button class="link left" data-act="pwopen">Сменить пароль</button>`;
+  }
+  h += `<button class="link danger left" style="display:block" data-act="logout">Выйти</button>`;
+  if (s.admin) {
+    if (USERS === null) { USERS = 'loading'; loadUsers(); }
+    h += `<h2 class="h2">Пользователи</h2>`;
+    if (CRED) h += `<p class="hint">Отправь это ${esc(CRED.login)} в личные сообщения. Пароль больше нигде не покажется.</p><div class="cred" id="cred">${esc(credText())}</div><div class="pair"><button class="btn quiet" data-act="credclose">Готово</button><button class="btn primary" data-act="credcopy">Скопировать</button></div>`;
+    h += !Array.isArray(USERS) ? `<p class="hint">Загружаю…</p>` : `<div class="rows" style="margin-top:10px">${USERS.map((u, i) => `<div class="row"><span class="t">${esc(u.login)}<br><span class="hint">${u.progress ? 'занимается' : 'ещё не входил'}${u.packs ? ', своих паков: ' + u.packs : ''}</span></span><span class="acts"><button class="link" data-act="resetpw" data-i="${i}">Новый пароль</button><button class="link danger" data-act="deluser" data-i="${i}">Удалить</button></span></div>`).join('')}</div>`;
+    h += `<div class="two" style="margin-top:14px;align-items:end"><label class="field" style="margin:0"><span>Новый пользователь</span><input id="s-newuser" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="логин латиницей"></label><button class="btn primary" style="min-height:48px" data-act="adduser">Создать</button></div>`;
+  }
+  return h;
+}
+const credText = () => 'Приложение: ' + location.origin + location.pathname.replace(/index\.html$/, '') + '\nСервер: ' + S.settings.server + '\nЛогин: ' + CRED.login + '\nПароль: ' + CRED.password;
+const lastSyncText = () => (S.sync.last ? 'Последняя синхронизация: <b>' + niceDate(ymd(new Date(S.sync.last))) + ', ' + pad(new Date(S.sync.last).getHours()) + ':' + pad(new Date(S.sync.last).getMinutes()) + '</b>' : 'Синхронизации ещё не было.') + (S.sync.dirty ? ' Есть неотправленные ответы.' : '');
 function renderSettings() {
   const el = $('#v-settings'), s = S.settings;
   const packs = Object.values(S.packs).sort((a, b) => a.key.localeCompare(b.key));
   const nMat = Object.keys(S.materials).length, nProg = Object.keys(S.progress).length;
+  const mode = SETMODE || (s.mode === 'github' || (!s.mode && s.repo && s.token) ? 'github' : 'server');
   el.innerHTML = topBar() + `<div class="scroll">
     <h1 class="lead">Настройки</h1>
-    <h2 class="h2">Репозиторий с данными</h2>
-    <p class="hint" style="margin-bottom:12px">Приватный репозиторий на GitHub, где лежат паки, материалы и файл с прогрессом.</p>
-    <label class="field"><span>Репозиторий</span><input id="s-repo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="логин/название" value="${esc(s.repo)}"></label>
+    <h2 class="h2">Аккаунт</h2>
+    ${configured() ? '' : `<div class="chips" aria-label="Способ входа"><button data-act="setmode" data-m="server" aria-pressed="${mode === 'server'}">Логин и пароль</button><button data-act="setmode" data-m="github" aria-pressed="${mode === 'github'}">Токен GitHub</button></div>`}
+    ${mode === 'server' ? serverBlock(s) : `<p class="hint" style="margin-bottom:12px">Приватный репозиторий на GitHub, где лежат паки, материалы и файл с прогрессом.</p>
+        <label class="field"><span>Репозиторий</span><input id="s-repo" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="логин/название" value="${esc(s.repo)}"></label>
     <label class="field"><span>Токен доступа</span><input id="s-token" type="password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="github_pat_..." value="${esc(s.token)}"><small>Токен хранится только на этом телефоне.</small></label>
+    <label class="field"><span>Профиль</span><input id="s-profile" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="основной" value="${esc(s.profile || '')}"><small>У каждого профиля свой прогресс, а карточки и материалы общие. Пустое поле - основной профиль.</small></label>
+    ${(s.profiles || []).length > 1 || ((s.profiles || []).length === 1 && s.profiles[0] !== profKey()) ? `<div class="chips" aria-label="Профили в репозитории">${s.profiles.map((k, i) => `<button data-act="pickprofile" data-i="${i}" aria-pressed="${k === profKey()}">${esc(k || 'основной')}</button>`).join('')}</div>` : ''}
     ${S.sync.error ? `<p class="err">${esc(S.sync.error)}</p>` : ''}
     <button class="btn primary" data-act="savesync">${syncing ? 'Синхронизация…' : 'Сохранить и синхронизировать'}</button>
     <p class="kv" style="margin-top:10px">${S.sync.last ? 'Последняя синхронизация: <b>' + niceDate(ymd(new Date(S.sync.last))) + ', ' + pad(new Date(S.sync.last).getHours()) + ':' + pad(new Date(S.sync.last).getMinutes()) + '</b>' : 'Синхронизации ещё не было.'}${S.sync.dirty ? ' Есть неотправленные ответы.' : ''}</p>
+    ${configured() ? '<button class="link left" data-act="setmode" data-m="server">Перейти на вход по логину и паролю</button>' : ''}`}
 
     <h2 class="h2">Сессия</h2>
     <div class="two"><label class="field"><span>Карточек за раз</span><input id="s-size" type="number" inputmode="numeric" min="1" max="500" value="${s.sessionSize}"></label>
@@ -609,7 +864,7 @@ function renderSettings() {
     <h2 class="h2">На телефоне</h2>
     <p class="kv">Паков: <b>${packs.length}</b>, карточек: <b>${IDX.cards.length}</b>, материалов: <b>${nMat}</b>, карточек с прогрессом: <b>${nProg}</b></p>
     <p class="kv">Защита от очистки: <b>${persisted === null ? 'проверяю' : persisted ? 'включена' : 'не выдана'}</b>${persisted === false ? '. Открывай приложение с иконки на экране «Домой».' : ''}</p>
-    ${packs.length ? `<div class="rows" style="margin-top:10px">${packs.map((p, i) => `<div class="row"><span class="t">${esc(p.title)}<br><span class="hint">${cardsWord(p.cards.length)}, ${p.src === 'repo' ? 'из репозитория' : 'загружен из файла'}</span></span>${p.src === 'file' ? `<button class="link danger" style="width:auto" data-act="delpack" data-i="${i}">Удалить</button>` : ''}</div>`).join('')}</div>` : ''}
+    ${packs.length ? `<div class="rows" style="margin-top:10px">${packs.map((p, i) => `<div class="row"><span class="t">${esc(p.title)}<br><span class="hint">${cardsWord(p.cards.length)}, ${p.src === 'repo' ? 'из репозитория' : p.src === 'server' ? (p.own ? 'свой, на сервере' : 'из каталога') : 'загружен из файла'}</span></span>${p.src === 'file' ? `<button class="link danger" style="width:auto" data-act="delpack" data-i="${i}">Удалить</button>` : ''}</div>`).join('')}</div>` : ''}
     <div class="stackv" style="margin-top:16px">
       <button class="btn quiet" data-act="import">Загрузить пак, конспект или бэкап</button>
       <button class="btn quiet" data-act="backup">Сохранить бэкап в файл</button>
@@ -646,6 +901,7 @@ async function importFiles(list) {
       const p = normPack(raw, f.name.replace(/\.json$/i, ''));
       if (!p.cards.length) throw new Error('пусто');
       S.packs[key] = { ...p, key, src: 'file', sha: '' }; packs++;
+      if (raw.materials && typeof raw.materials === 'object') for (const [n, t] of Object.entries(raw.materials)) { const path = 'materials/' + slug(p.id) + '/' + String(n).split('/').pop().replace(/(\.md)?$/i, '.md'); if (!S.materials[path] || S.materials[path].src === 'file') { S.materials[path] = { path, src: 'file', sha: '', text: String(t) }; mats++; } }
     } catch { bad.push(f.name); }
   }
   await save('packs'); await save('materials'); await save('progress'); reindex();
@@ -676,11 +932,16 @@ document.addEventListener('click', async ev => {
   }
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act;
-  if (act === 'tab') { if (VIEW === 'settings') { readSessionInputs(); save('settings'); } show(b.dataset.view); }
+  if (act === 'tab') { if (VIEW === 'settings') { readSessionInputs(); save('settings'); } if (b.dataset.view === 'catalog' && S.settings.admin) SUGG = null; show(b.dataset.view); }
   else if (act === 'chip') { if (configured()) sync({ manual: true }); else show('settings'); }
   else if (act === 'scope') {
     if (b.dataset.t != null) S.settings.scope = { ...HOME.topics[+b.dataset.t] };
     else S.settings.scope = { pack: +b.dataset.p < 0 ? null : HOME.packs[+b.dataset.p], topic: null };
+    save('settings'); const y = $('#v-home .scroll').scrollTop; renderHome(); $('#v-home .scroll').scrollTop = y;
+  }
+  else if (act === 'fold') {
+    const key = HOME.packs[+b.dataset.p]; if (!key) return;
+    S.settings.open = { ...(S.settings.open || {}), [key]: !(S.settings.open || {})[key] };
     save('settings'); const y = $('#v-home .scroll').scrollTop; renderHome(); $('#v-home .scroll').scrollTop = y;
   }
   else if (act === 'start') startSession('review');
@@ -693,12 +954,71 @@ document.addEventListener('click', async ev => {
   else if (act === 'material') { const ref = R.cur.material; openMaterial(findMaterial(ref), ref.split('#')[1], 'review'); }
   else if (act === 'openmat') openMaterial(MATS[+b.dataset.i].path, null, 'materials');
   else if (act === 'readerback') show(readerBack);
-  else if (act === 'import') $('#file').click();
+  else if (act === 'import') { uploadMode = false; $('#file').click(); }
+  else if (act === 'upload') { uploadMode = true; $('#file').click(); }
+  else if (act === 'sub') {
+    const c = CATV[+b.dataset.i]; if (!c) return;
+    const ids = new Set(S.subs.ids); ids.has(c.id) ? ids.delete(c.id) : ids.add(c.id);
+    S.subs = { ids: [...ids], ts: Date.now() }; await save('subs'); markDirty(); renderCatalog();
+    if (ids.has(c.id)) toast('Скачиваю «' + c.title + '»…');
+    await sync(); if (ids.has(c.id) && !S.sync.error) toast('«' + c.title + '» на телефоне');
+  }
+  else if (act === 'suggest') { const p = OWN[+b.dataset.i]; if (p) await act2(() => api('suggest', { id: p.id, on: b.dataset.on === '1' }), b.dataset.on === '1' ? 'Отправлено на рассмотрение' : 'Предложение отозвано'); }
+  else if (act === 'delown') { const p = OWN[+b.dataset.i]; if (p && confirm('Удалить свой пак «' + p.title + '» с сервера? Прогресс по нему останется.')) await act2(() => api('deleteOwn', { id: p.id }), 'Пак удалён'); }
+  else if (act === 'delownmat') { const m = OWNMAT[+b.dataset.i]; if (m && confirm('Удалить конспект «' + matTitle(m) + '»?')) await act2(() => api('deleteOwn', { path: m.path }), 'Конспект удалён'); }
+  else if (act === 'publish') { const x = SUGG[+b.dataset.i]; if (x && confirm('Опубликовать «' + x.title + '» от ' + x.login + ' в каталог? Его увидят все.')) { await act2(() => api('publish', { login: x.login, id: x.id }), 'Опубликовано'); SUGG = null; renderCatalog(); } }
+  else if (act === 'reject') { const x = SUGG[+b.dataset.i]; if (x && confirm('Отклонить «' + x.title + '»? Пак останется у автора.')) { await act2(() => api('reject', { login: x.login, id: x.id }), 'Отклонено'); SUGG = null; renderCatalog(); } }
+  else if (act === 'setmode') { SETMODE = b.dataset.m; S.sync.error = ''; renderSettings(); }
+  else if (act === 'login') {
+    const server = $('#s-server').value.trim(), login = $('#s-login').value.trim().toLowerCase(), password = $('#s-pass').value;
+    if (!/^https:\/\/[^\s/]+\.[^\s]+$/i.test(server) && !/^http:\/\/localhost(:\d+)?\/?$/.test(server)) { toast('Адрес сервера начинается с https://'); return; }
+    if (!login || !password) { toast('Введи логин и пароль'); return; }
+    const prev = { progress: S.progress, mode: S.settings.mode, login: S.settings.login };
+    S.settings.server = server;
+    let r;
+    try { b.disabled = true; b.textContent = 'Вхожу…'; const keep = S.settings.session; S.settings.session = ''; try { r = await api('login', { login, password }); } finally { if (!r) S.settings.session = keep; } }
+    catch (e) { S.sync.error = e.status === 403 ? 'Неверный логин или пароль.' : apiErrorText(e); renderSettings(); return; }
+    if (prev.mode !== 'server' || prev.login !== r.login) dropRemote();
+    S.settings.mode = 'server'; S.settings.login = r.login; S.settings.session = r.session; S.settings.admin = !!r.admin; SETMODE = ''; USERS = null; SUGG = null; CRED = null;
+    await save('settings'); await loadProfile();
+    if (!Object.keys(S.progress).length && Object.keys(prev.progress || {}).length && prev.mode !== 'server') { S.progress = { ...prev.progress }; await save('progress'); S.sync.dirty = true; }
+    reindex(); S.sync.error = ''; await save('sync'); renderSettings();
+    await sync({ manual: true });
+    if (!S.subs.ids.length && CAT.catalog.length) show('catalog');
+  }
+  else if (act === 'logout') { if (!confirm('Выйти из аккаунта на этом телефоне? Скачанные паки удалятся, прогресс сохранён на сервере.')) return; if (S.sync.dirty) await sync(); S.settings.session = ''; S.settings.admin = false; dropRemote(); CAT = { catalog: [], mySugg: [], suggestions: 0 }; USERS = null; SUGG = null; await save('settings'); reindex(); S.progress = {}; renderSettings(); }
+  else if (act === 'pwopen') { PWOPEN = true; renderSettings(); }
+  else if (act === 'pwcancel') { PWOPEN = false; renderSettings(); }
+  else if (act === 'passwd') {
+    const old = $('#s-old').value, nw = $('#s-new1').value;
+    if (nw.length < 8) { toast('Новый пароль - от 8 символов'); return; }
+    try { const r = await api('passwd', { old, password: nw }); S.settings.session = r.session; await save('settings'); PWOPEN = false; toast('Пароль изменён. На других телефонах нужно войти заново.'); renderSettings(); } catch (e) { toast(apiErrorText(e)); }
+  }
+  else if (act === 'adduser' || act === 'resetpw') {
+    const login = act === 'adduser' ? $('#s-newuser').value.trim().toLowerCase() : USERS[+b.dataset.i].login;
+    if (act === 'adduser' && !/^[a-z0-9][a-z0-9_-]{1,31}$/.test(login)) { toast('Логин: латиница, цифры, - и _, от 2 символов'); return; }
+    if (act === 'resetpw' && !confirm('Выдать ' + login + ' новый пароль? Старый перестанет работать.')) return;
+    if (act === 'adduser' && Array.isArray(USERS) && USERS.some(u => u.login === login)) { toast('Такой пользователь уже есть'); return; }
+    const password = genPassword();
+    try { await api('addUser', { login, password }); CRED = { login, password }; USERS = null; renderSettings(); } catch (e) { toast(apiErrorText(e)); }
+  }
+  else if (act === 'deluser') { const u = USERS[+b.dataset.i]; if (u && confirm('Удалить пользователя ' + u.login + '? Он больше не сможет войти. Его прогресс и паки останутся в репозитории.')) { try { await api('delUser', { login: u.login }); USERS = null; renderSettings(); toast('Удалён'); } catch (e) { toast(apiErrorText(e)); } } }
+  else if (act === 'credcopy') { try { await navigator.clipboard.writeText(credText()); toast('Скопировано'); } catch { const r = document.createRange(); r.selectNodeContents($('#cred')); getSelection().removeAllRanges(); getSelection().addRange(r); toast('Выделено - нажми «Скопировать»'); } }
+  else if (act === 'credclose') { CRED = null; renderSettings(); }
   else if (act === 'backup') backup();
+  else if (act === 'pickprofile') { $('#s-profile').value = (S.settings.profiles || [])[+b.dataset.i] || ''; toast('Нажми «Сохранить и синхронизировать», чтобы переключиться'); }
+  else if (act === 'matcards') startCustom(READER_CARDS);
   else if (act === 'savesync') {
+    if (syncing) { toast('Идёт синхронизация, попробуй через пару секунд'); return; }
     readSessionInputs();
+    if (serverMode() && configured()) { await save('settings'); sync({ manual: true }); renderSettings(); return; }
+    if (serverMode()) { dropRemote(); }
+    if (S.settings.mode !== 'github') { S.settings.mode = 'github'; SETMODE = ''; await loadProfile(); }
     const repo = parseRepo($('#s-repo').value), token = $('#s-token').value.trim();
+    const profile = $('#s-profile').value.trim().normalize('NFC');
     if ($('#s-repo').value.trim() && !repo) { toast('Репозиторий пишется как логин/название'); return; }
+    if (profile && !slug(profile)) { toast('В имени профиля нужны буквы или цифры'); return; }
+    if (slug(profile) !== profKey()) await switchProfile(profile); else S.settings.profile = profile;
     if (repo !== S.settings.repo) { S.sync = { last: 0, dirty: Object.keys(S.progress).length > 0, progressSha: '', error: '', reset: false }; for (const k of Object.keys(S.packs)) if (S.packs[k].src === 'repo') delete S.packs[k]; for (const k of Object.keys(S.materials)) if (S.materials[k].src === 'repo') delete S.materials[k]; S.images = {}; reindex(); await save('packs'); await save('materials'); await save('images'); }
     S.settings.repo = repo; S.settings.token = token; S.sync.error = '';
     await save('settings'); await save('sync');
@@ -710,7 +1030,7 @@ document.addEventListener('click', async ev => {
 });
 document.addEventListener('change', ev => {
   if (ev.target.id === 'optmode') { S.settings.options = ev.target.checked; save('settings'); }
-  else if (ev.target.id === 'file') { const files = [...ev.target.files]; ev.target.value = ''; if (files.length) importFiles(files); }
+  else if (ev.target.id === 'file') { const files = [...ev.target.files]; ev.target.value = ''; const up = uploadMode; uploadMode = false; if (files.length) (up ? uploadFiles(files) : importFiles(files)); }
   else if (ev.target.id === 's-size' || ev.target.id === 's-new') { readSessionInputs(); save('settings'); }
 });
 document.addEventListener('input', ev => { if (ev.target.id === 'matq') { matQuery = ev.target.value; drawMatList(); } });
@@ -720,7 +1040,9 @@ addEventListener('offline', refreshChip);
 
 /* ---------- запуск ---------- */
 (async () => {
-  await loadAll(); reindex(); show('home');
+  await loadAll(); reindex();
+  if (serverMode()) { try { const c = await DB.get('cat'); if (c && Array.isArray(c.catalog)) CAT = c; } catch {} }
+  show('home');
   if (navigator.storage?.persist) navigator.storage.persist().then(v => { persisted = v; }).catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   sync();
