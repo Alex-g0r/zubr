@@ -389,10 +389,8 @@ async function syncServer(opts) {
     // 2. какие файлы должны быть на телефоне
     const subs = new Set(S.subs.ids), want = new Map();
     const folders = new Set();
-    const packFolders = new Set();   // папки материалов, которые принадлежат какому-то паку каталога
-    for (const c of CAT.catalog) { packFolders.add(c.folder); packFolders.add(c.id); if (subs.has(c.id)) { want.set(c.path, c.sha); folders.add(c.folder); folders.add(c.id); } }
-    // материалы вне папок паков (например, «Законы») доступны всем, папки паков - только по подписке
-    for (const f of L.files || []) { const rest = f.path.slice('materials/'.length); const top = rest.includes('/') ? rest.split('/')[0] : ''; if (!top ? !isImg(f.path) : folders.has(top) || !packFolders.has(top)) want.set(f.path, f.sha); }
+    for (const c of CAT.catalog) if (subs.has(c.id)) { want.set(c.path, c.sha); folders.add(c.folder); folders.add(c.id); }
+    for (const f of L.files || []) { const rest = f.path.slice('materials/'.length); const top = rest.includes('/') ? rest.split('/')[0] : ''; if (!top ? !isImg(f.path) : folders.has(top)) want.set(f.path, f.sha); }
     for (const f of L.own || []) want.set(f.path, f.sha);
     for (const k of Object.keys(S.packs)) if ((S.packs[k].src === 'server') && !want.has(k)) { delete S.packs[k]; changed = true; }
     for (const k of Object.keys(S.materials)) if ((S.materials[k].src === 'server') && !want.has(k)) { delete S.materials[k]; changed = true; }
@@ -559,7 +557,7 @@ function renderHome() {
   let lead, sub;
   if (k.due + k.fresh === 0) { lead = 'На сегодня всё'; sub = nextDue ? 'Ближайшие карточки вернутся ' + niceDate(nextDue) + '.' : 'Все карточки выучены.'; }
   else { lead = 'Сегодня ' + cardsWord(k.due + k.fresh); sub = k.due && k.fresh ? k.due + ' на повторение, ' + k.fresh + ' ' + plural(k.fresh, ['новая', 'новые', 'новых']) + '.' : k.due ? 'Все на повторение, новых нет.' : 'Все новые, повторять пока нечего.'; }
-  HOME = { packs: Object.keys(S.packs).sort(), topics: [] };
+  HOME = { packs: Object.keys(S.packs).filter(k => S.packs[k].cards.length).sort(), topics: [] };
   const rowHtml = (cls, pressed, attrs, title, c) => `<button class="row ${cls}" aria-pressed="${pressed}" data-act="scope" ${attrs}><span class="dot"></span><span class="t">${esc(title)}</span><span class="cnt" title="повторить">${c.due || ''}</span><span class="cnt fresh" title="новые">${c.fresh ? '+' + c.fresh : ''}</span></button>`;
   let rows = HOME.packs.length > 1 ? rowHtml('', !sc.pack, 'data-p="-1"', 'Все паки', counts(IDX.cards)) : '';
   const open = S.settings.open || {};
@@ -750,7 +748,7 @@ function renderCatalog() {
   CATV = CAT.catalog;
   let h = `<div class="scroll"><h1 class="lead">Каталог</h1><p class="sub">Общие паки. Добавленные скачиваются на телефон и работают без интернета.</p>`;
   if (!CATV.length) h += `<p class="hint">${S.sync.last ? 'В каталоге пока пусто.' : 'Загружаю…'}</p>`;
-  else h += `<div class="rows">${CATV.map((c, i) => `<div class="row"><span class="t">${esc(c.title)}<br><span class="hint">${cardsWord(c.cards)}${c.author ? ', автор ' + esc(c.author) : ''}</span></span><button class="pill" aria-pressed="${subs.has(c.id)}" data-act="sub" data-i="${i}">${subs.has(c.id) ? 'Добавлен' : 'Добавить'}</button></div>`).join('')}</div>`;
+  else h += `<div class="rows">${CATV.map((c, i) => `<div class="row"><span class="t">${esc(c.title)}<br><span class="hint">${c.cards ? cardsWord(c.cards) : 'только материалы'}${c.author ? ', автор ' + esc(c.author) : ''}</span></span><button class="pill" aria-pressed="${subs.has(c.id)}" data-act="sub" data-i="${i}">${subs.has(c.id) ? 'Добавлен' : 'Добавить'}</button></div>`).join('')}</div>`;
   OWN = Object.values(S.packs).filter(p => p.src === 'server' && p.own).sort((a, b) => a.title.localeCompare(b.title, 'ru'));
   const packIds = new Set(OWN.map(p => p.id));
   OWNMAT = Object.values(S.materials).filter(m => m.src === 'server' && m.path.startsWith('users/') && !packIds.has(matGroup(m))).sort((a, b) => a.path.localeCompare(b.path, 'ru'));
@@ -864,7 +862,7 @@ function renderSettings() {
     <h2 class="h2">На телефоне</h2>
     <p class="kv">Паков: <b>${packs.length}</b>, карточек: <b>${IDX.cards.length}</b>, материалов: <b>${nMat}</b>, карточек с прогрессом: <b>${nProg}</b></p>
     <p class="kv">Защита от очистки: <b>${persisted === null ? 'проверяю' : persisted ? 'включена' : 'не выдана'}</b>${persisted === false ? '. Открывай приложение с иконки на экране «Домой».' : ''}</p>
-    ${packs.length ? `<div class="rows" style="margin-top:10px">${packs.map((p, i) => `<div class="row"><span class="t">${esc(p.title)}<br><span class="hint">${cardsWord(p.cards.length)}, ${p.src === 'repo' ? 'из репозитория' : p.src === 'server' ? (p.own ? 'свой, на сервере' : 'из каталога') : 'загружен из файла'}</span></span>${p.src === 'file' ? `<button class="link danger" style="width:auto" data-act="delpack" data-i="${i}">Удалить</button>` : ''}</div>`).join('')}</div>` : ''}
+    ${packs.length ? `<div class="rows" style="margin-top:10px">${packs.map((p, i) => `<div class="row"><span class="t">${esc(p.title)}<br><span class="hint">${p.cards.length ? cardsWord(p.cards.length) : 'только материалы'}, ${p.src === 'repo' ? 'из репозитория' : p.src === 'server' ? (p.own ? 'свой, на сервере' : 'из каталога') : 'загружен из файла'}</span></span>${p.src === 'file' ? `<button class="link danger" style="width:auto" data-act="delpack" data-i="${i}">Удалить</button>` : ''}</div>`).join('')}</div>` : ''}
     <div class="stackv" style="margin-top:16px">
       <button class="btn quiet" data-act="import">Загрузить пак, конспект или бэкап</button>
       <button class="btn quiet" data-act="backup">Сохранить бэкап в файл</button>
